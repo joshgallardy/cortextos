@@ -189,6 +189,28 @@ Sessions auto-restart with `--continue` every ~71 hours. On context exhaustion, 
 
 ---
 
+## Graphify Knowledge Graph
+
+If your org/project has a Graphify knowledge graph, use it for architecture questions:
+
+**Commands:**
+- `graphify query "question"` — Search the graph for entities and relationships
+- `graphify path "nodeA" "nodeB"` — Find shortest path between two nodes
+- `graphify explain "entity"` — Explain a node and its neighbors
+
+**Rules:**
+- For architecture/codebase questions, prefer `graphify query/path/explain` over grep or reading raw files
+- The graph extracts + infers relationships that raw file scanning misses
+- After code changes in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
+- When asked "How does X relate to Y?", use graph traversal instead of file scanning
+
+**Setup:** If the project has a graphify-out/ directory with graph.json:
+1. Read graphify-out/GRAPH_REPORT.md for architecture overview (god nodes, communities)
+2. Use graphify-out/wiki/index.md as navigation guide if it exists
+3. All three commands use the graph at graphify-out/graph.json by default
+
+---
+
 ## Knowledge Base (RAG)
 
 Query and ingest org documents using natural language. See `.claude/skills/knowledge-base/SKILL.md` for full reference.

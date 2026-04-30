@@ -1,0 +1,129 @@
+{
+  "project": {
+    "name": "cortextOS",
+    "description": "Comprehensive knowledge graph of cortextOS framework and ecosystem",
+    "root_path": "/Users/cortextos/cortextos",
+    "version": "3.0-day3"
+  },
+  "indexing": {
+    "include_paths": [
+      "src/",
+      "orgs/lifeos/agents/",
+      "dashboard/",
+      "templates/",
+      "community/",
+      "tests/"
+    ],
+    "exclude_patterns": [
+      "node_modules/",
+      "dist/",
+      "build/",
+      ".git/",
+      ".next/",
+      "*.test.ts",
+      "*.spec.ts",
+      ".DS_Store",
+      "__pycache__",
+      "*.pyc"
+    ],
+    "file_patterns": {
+      "code": [
+        "*.ts",
+        "*.tsx",
+        "*.js",
+        "*.jsx",
+        "*.py",
+        "*.json"
+      ],
+      "docs": [
+        "*.md",
+        "*.mdx"
+      ],
+      "config": [
+        "*.yaml",
+        "*.yml",
+        "*.env*",
+        "*.json"
+      ]
+    }
+  },
+  "extraction": {
+    "code_entities": {
+      "extract_functions": true,
+      "extract_classes": true,
+      "extract_interfaces": true,
+      "extract_types": true,
+      "extract_imports": true,
+      "extract_exports": true,
+      "track_dependencies": true,
+      "analyze_complexity": true
+    },
+    "documentation": {
+      "extract_comments": true,
+      "extract_docstrings": true,
+      "extract_readme": true,
+      "link_code_to_docs": true,
+      "extract_examples": true
+    },
+    "semantic": {
+      "extract_patterns": true,
+      "extract_decisions": true,
+      "extract_relationships": true,
+      "community_detection": true,
+      "temporal_analysis": true
+    }
+  },
+  "graph": {
+    "node_types": [
+      "Agent",
+      "Skill",
+      "Project",
+      "Cron",
+      "APIEndpoint",
+      "CodeModule",
+      "Function",
+      "Class",
+      "Interface",
+      "Type",
+      "Pattern",
+      "Decision",
+      "Service",
+      "Document",
+      "Configuration",
+      "Team",
+      "Component",
+      "Limitation",
+      "Concept",
+      "DataFlow"
+    ],
+    "relationship_types": [
+      "owns",
+      "uses",
+      "depends_on",
+      "implements",
+      "extends",
+      "publishes",
+      "calls",
+      "imports",
+      "exports",
+      "references",
+      "documents",
+      "exemplifies",
+      "blocks",
+      "enables",
+      "requires",
+      "manages",
+      "coordinates",
+      "monitors",
+      "triggers",
+      "receives"
+    ]
+  },
+  "output": {
+    "format": "json",
+    "include_metadata": true,
+    "include_statistics": true,
+    "include_embeddings": false,
+    "output_file": "/Users/cortextos/cortextos/day3-knowledge-graph.json"
+  }
+}

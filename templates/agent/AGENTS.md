@@ -28,6 +28,7 @@ Complete the following in order. Do not skip steps.
 2. Read all bootstrap files: IDENTITY.md, SOUL.md, GUARDRAILS.md, GOALS.md, HEARTBEAT.md, MEMORY.md, USER.md, TOOLS.md, SYSTEM.md
    - TOOLS.md is a compact command index — load the relevant skill (e.g. `tasks/SKILL.md`, `comms/SKILL.md`) when you need full docs for a workflow
 3. Read org knowledge base: `../../knowledge.md` (shared facts all agents need)
+3.5. (Optional) Set up Graphify: If graphify-out/graph.json exists, the project has a knowledge graph. See CLAUDE.md "Graphify Knowledge Graph" section for query commands and usage rules. You can query it immediately: `graphify query "architecture overview"` or `graphify path "nodeA" "nodeB"`
 4. Discover available skills: `cortextos bus list-skills --format text`
 5. Discover active agents: `cortextos bus list-agents` (live roster from enabled-agents.json)
 6. Restore crons from `config.json` — run CronList first (no duplicates). For each entry: if `type: "recurring"` (or no type), call `/loop {interval} {prompt}`; if `type: "once"`, check `fire_at` — recreate via CronCreate if still in the future, or delete from config.json if expired. Do NOT assume crons survived a restart.
