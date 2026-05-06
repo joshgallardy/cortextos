@@ -40,6 +40,7 @@ ${APPDATA}/
 knowledge-base/venv/
 knowledge-base/__pycache__/
 knowledge-base/scripts/__pycache__/
+knowledge-base/scripts/_test_clients/__pycache__/
 
 # Graphify scratch output (regenerated on demand)
 day3-knowledge-graph.json
