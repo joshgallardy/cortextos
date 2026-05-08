@@ -150,9 +150,9 @@ describe('CodexPTY typing-indicator wiring (issue #330)', () => {
 });
 
 describe('CodexPTY bootstrap pattern', () => {
-  it('isBootstrapped() fires on thread.started JSONL', () => {
+  it('isBootstrapped() fires on the exec completion marker', () => {
     const pty = new CodexPTY(mockEnv, {});
-    pty.getOutputBuffer().push('{"type":"thread.started","id":"abc"}\n');
+    pty.getOutputBuffer().push('[codex-ready]');
     expect(pty.getOutputBuffer().isBootstrapped()).toBe(true);
   });
 
@@ -162,34 +162,33 @@ describe('CodexPTY bootstrap pattern', () => {
     expect(pty.getOutputBuffer().isBootstrapped()).toBe(false);
   });
 
-  it('builds fresh exec args with features, model, and prompt', () => {
+  it('builds fresh exec args with noninteractive approval, sandbox, features, model, and prompt', () => {
     const pty = new CodexPTY(mockEnv, { model: 'gpt-5-codex' });
     const args = (pty as unknown as { buildFreshArgs(prompt: string): string[] })
       .buildFreshArgs('hello');
 
     expect(args).toEqual([
+      '-a', 'never',
+      '--sandbox', 'workspace-write',
       'exec',
       '--skip-git-repo-check',
-      '--sandbox', 'workspace-write',
-      '--json',
       '--enable', 'goals',
       '--model', 'gpt-5-codex',
       'hello',
     ]);
   });
 
-  it('builds resume exec args with --last and noninteractive bypass', () => {
+  it('builds resume exec args with --last, noninteractive approval, sandbox, and features', () => {
     const pty = new CodexPTY(mockEnv, {});
     const args = (pty as unknown as { buildResumeArgs(prompt: string): string[] })
       .buildResumeArgs('next');
 
     expect(args).toEqual([
+      '-a', 'never',
+      '--sandbox', 'workspace-write',
       'exec',
       'resume',
       '--last',
-      '--skip-git-repo-check',
-      '--dangerously-bypass-approvals-and-sandbox',
-      '--json',
       '--enable', 'goals',
       'next',
     ]);

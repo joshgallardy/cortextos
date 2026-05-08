@@ -38,8 +38,8 @@ type SpawnFn = (file: string, args: string[], options: IPtySpawnOptions) => IPty
  * - alive stays true until explicit kill() — daemon never sees "crashed" between turns
  * - write() accumulates bracketed-paste input until Enter, then queues an exec
  * - drainQueue() serializes: one exec process at a time, no concurrent spawns
- * - --json flag gives structured JSONL output: bootstrap on thread.started, idle on turn.completed
- * - last_idle.flag written on turn.completed (not process exit) for fast-checker typing indicator
+ * - exec completion is process exit: exit code 0 means the turn completed
+ * - last_idle.flag is written after each exec exits for fast-checker typing indicator
  */
 export class CodexPTY extends AgentPTY {
   private alive = false;           // true after first spawn, false only after kill()
@@ -63,15 +63,15 @@ export class CodexPTY extends AgentPTY {
   private _typingLastSent = 0;
 
   constructor(env: CtxEnv, config: AgentConfig, logPath?: string) {
-    super(env, config, logPath, '"type":"thread.started"');
+    super(env, config, logPath, '[codex-ready]');
     this._env = env;
     this._config = config;
     this._cwd = config.working_directory || env.agentDir || process.cwd();
     this._stateDir = join(env.ctxRoot, 'state', env.agentName);
 
-    // Bootstrap pattern: detect "thread.started" in JSONL output
-    // Codex outputs JSONL with --json flag; we store raw for parseability
-    this._outputBuffer = new OutputBuffer(1000, logPath, '"type":"thread.started"');
+    // Exec mode has no persistent TUI readiness marker. We push this marker
+    // once the initial exec finishes so AgentProcess can report bootstrapped.
+    this._outputBuffer = new OutputBuffer(1000, logPath, '[codex-ready]');
   }
 
   /**
@@ -165,8 +165,8 @@ export class CodexPTY extends AgentPTY {
   }
 
   /**
-   * Output buffer containing raw JSONL output from the most recent exec turn.
-   * isBootstrapped() returns true when "thread.started" appears.
+   * Output buffer containing output from the most recent exec turn.
+   * isBootstrapped() returns true after the first exec turn completes.
    */
   getOutputBuffer(): OutputBuffer {
     return this._outputBuffer;
@@ -174,9 +174,9 @@ export class CodexPTY extends AgentPTY {
 
   /**
    * Provide the Telegram API handle + chatId used to fire typing indicators
-   * directly from the JSONL stream (issue #330). Called by AgentProcess when
-   * the daemon has loaded the agent's bot credentials. Without this, typing
-   * still falls back to fast-checker's last_idle.flag path.
+   * during exec turns (issue #330). Called by AgentProcess when the daemon has
+   * loaded the agent's bot credentials. Without this, typing still falls back
+   * to fast-checker's last_idle.flag path.
    */
   setTelegramHandle(api: TelegramAPI, chatId: string): void {
     this._telegramApi = api;
@@ -197,7 +197,7 @@ export class CodexPTY extends AgentPTY {
 
   /**
    * Drain the exec queue serially: one codex exec resume at a time.
-   * Writes last_idle.flag after each turn.completed JSONL event.
+   * Writes last_idle.flag after each exec exits.
    */
   private async drainQueue(): Promise<void> {
     while (this.alive && this._execQueue.length > 0) {
@@ -215,7 +215,7 @@ export class CodexPTY extends AgentPTY {
 
   /**
    * Spawn a single codex exec process, capture output, wait for exit.
-   * Parses JSONL output for turn.completed → writes last_idle.flag.
+   * Codex exec is turn-based, so process exit is the completion signal.
    */
   private runExec(args: string[]): Promise<void> {
     return new Promise<void>((resolve, reject) => {
@@ -235,24 +235,21 @@ export class CodexPTY extends AgentPTY {
       });
 
       this._currentPty = pty;
+      this.maybeFireTyping();
+      const typingTimer = setInterval(() => this.maybeFireTyping(), 4000);
 
       pty.onData((data: string) => {
         this._outputBuffer.push(data);
-        // Detect turn.completed in JSONL output → write last_idle.flag
-        if (data.includes('"turn.completed"') || data.includes('"type":"turn.completed"')) {
-          this.writeIdleFlag();
-        } else if (data.includes('"type":"')) {
-          // Issue #330: any other JSONL event during the turn → fire typing
-          this.maybeFireTyping();
-        }
       });
 
       pty.onExit(({ exitCode }) => {
+        clearInterval(typingTimer);
         if (this._currentPty === pty) {
           this._currentPty = null;
         }
         // Write idle flag on process exit as fallback (catches turn.completed race)
         this.writeIdleFlag();
+        this._outputBuffer.push('[codex-ready]');
         if (exitCode && exitCode !== 0 && this.alive) {
           reject(new Error(`codex exec exited with code ${exitCode}`));
           return;
@@ -309,17 +306,17 @@ export class CodexPTY extends AgentPTY {
 
   /**
    * Build args for a fresh exec (new session).
+   * -a never: non-interactive daemon mode, no approval prompts
+   * --sandbox workspace-write: safe command sandbox level
    * --skip-git-repo-check: skip trust check for daemon-managed directories
-   * --sandbox workspace-write: sets approval=never + safe sandbox level
-   * --json: structured JSONL output for reliable event detection
    * --enable <feature>: codex feature flags defaulted on for cortextOS agents
    */
   private buildFreshArgs(prompt: string): string[] {
     const args = [
+      '-a', 'never',
+      '--sandbox', 'workspace-write',
       'exec',
       '--skip-git-repo-check',
-      '--sandbox', 'workspace-write',
-      '--json',
       ...this.featureFlagArgs(),
     ];
     if (this._config.model) {
@@ -331,18 +328,18 @@ export class CodexPTY extends AgentPTY {
 
   /**
    * Build args for resuming the most recent session in this cwd.
+   * -a never: non-interactive daemon mode, no approval prompts
+   * --sandbox workspace-write: safe command sandbox level (global Codex flag)
    * --last: pick most recent thread for current cwd (cwd-filtered by default)
-   * --dangerously-bypass-approvals-and-sandbox: required for exec resume (--sandbox not available)
    * --enable <feature>: codex feature flags defaulted on for cortextOS agents
    */
   private buildResumeArgs(prompt: string): string[] {
     const args = [
+      '-a', 'never',
+      '--sandbox', 'workspace-write',
       'exec',
       'resume',
       '--last',
-      '--skip-git-repo-check',
-      '--dangerously-bypass-approvals-and-sandbox',
-      '--json',
       ...this.featureFlagArgs(),
     ];
     if (this._config.model) {
