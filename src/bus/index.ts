@@ -44,6 +44,16 @@ export {
   type SubmitResult,
 } from './catalog.js';
 export {
+  dispatchPlugin,
+  listRuntimePlugins,
+  pollInbox,
+  recordTriage,
+  type DispatchResult,
+  type DispatchOptions,
+  type PollResult,
+  type TriageRecord,
+} from './plugin.js';
+export {
   collectMetrics,
   parseUsageOutput,
   storeUsageData,
