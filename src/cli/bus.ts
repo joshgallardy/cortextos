@@ -19,6 +19,7 @@ import { addCron, removeCron, readCrons, updateCron as updateCronDef, getCronByN
 import { nextFireFromCron } from '../daemon/cron-scheduler.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
+import { getCostStatus } from '../bus/cost-caps.js';
 import { resolvePaths } from '../utils/paths.js';
 import { resolveEnv } from '../utils/env.js';
 import { IPCClient } from '../daemon/ipc-server.js';
@@ -1014,6 +1015,213 @@ busCommand
       console.log('Message sent');
     } catch (err: any) {
       console.error(`Failed to send: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('dispatch-plugin')
+  .description('Dispatch a task to a bob-runtime plugin')
+  .argument('<plugin>', 'Plugin name (e.g. inbox_echo)')
+  .argument('<task>', 'Task description text')
+  .option('--tenant <tenant>', 'Tenant scope', 'personal')
+  .option('--complexity <level>', 'simple | standard | complex')
+  .option('--meta <json>', 'JSON metadata', '{}')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .action(async (plugin: string, task: string, opts: { tenant: string; complexity?: string; meta: string; port: string }) => {
+    const { dispatchPlugin } = await import('../bus/plugin.js');
+    let metadata: Record<string, unknown> = {};
+    try {
+      metadata = JSON.parse(opts.meta);
+    } catch {
+      console.error('Invalid --meta JSON');
+      process.exit(1);
+    }
+    try {
+      const result = await dispatchPlugin(plugin, {
+        task,
+        tenant: opts.tenant,
+        complexity: opts.complexity as any,
+        metadata,
+      }, parseInt(opts.port, 10), process.env.BOB_DISPATCH_SECRET);
+      console.log(JSON.stringify(result));
+    } catch (err: any) {
+      console.error(`Dispatch failed: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('list-plugins')
+  .description('List available bob-runtime plugins')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .action(async (opts: { port: string }) => {
+    const { listRuntimePlugins } = await import('../bus/plugin.js');
+    try {
+      const plugins = await listRuntimePlugins(parseInt(opts.port, 10));
+      for (const [name, info] of Object.entries(plugins)) {
+        console.log(`${name} (v${info.version})`);
+      }
+    } catch (err: any) {
+      console.error(`Failed: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('poll-inbox')
+  .description('Poll Gmail inbox via bob-runtime and triage new messages')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .option('--max <n>', 'Max messages to pull', '20')
+  .action(async (opts: { port: string; max: string }) => {
+    const { pollInbox } = await import('../bus/plugin.js');
+    try {
+      const result = await pollInbox(
+        parseInt(opts.port, 10),
+        parseInt(opts.max, 10),
+        process.env.BOB_DISPATCH_SECRET,
+      );
+      console.log(JSON.stringify(result));
+    } catch (err: any) {
+      console.error(`Poll failed: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('record-triage')
+  .description('Write pre-classified triage records to bob-runtime TriageStore')
+  .argument('<json>', 'JSON array of triage records')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .action(async (jsonStr: string, opts: { port: string }) => {
+    const { recordTriage } = await import('../bus/plugin.js');
+    let records;
+    try {
+      records = JSON.parse(jsonStr);
+      if (!Array.isArray(records)) records = [records];
+    } catch {
+      console.error('Invalid JSON');
+      process.exit(1);
+    }
+    try {
+      const result = await recordTriage(records, parseInt(opts.port, 10), process.env.BOB_DISPATCH_SECRET);
+      console.log(JSON.stringify(result));
+    } catch (err: any) {
+      console.error(`Failed: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('gmail-label-thread')
+  .description('Add/remove labels on a Gmail thread')
+  .argument('<thread-id>', 'Gmail thread ID')
+  .option('--add <labels>', 'Comma-separated label IDs to add', '')
+  .option('--remove <labels>', 'Comma-separated label IDs to remove', '')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .action(async (threadId: string, opts: { add: string; remove: string; port: string }) => {
+    const { gmailLabelThread } = await import('../bus/plugin.js');
+    const addLabels = opts.add ? opts.add.split(',').map(s => s.trim()) : [];
+    const removeLabels = opts.remove ? opts.remove.split(',').map(s => s.trim()) : [];
+    if (!addLabels.length && !removeLabels.length) {
+      console.error('Must specify --add and/or --remove');
+      process.exit(1);
+    }
+    try {
+      const result = await gmailLabelThread(
+        threadId, addLabels, removeLabels,
+        parseInt(opts.port, 10), process.env.BOB_DISPATCH_SECRET,
+      );
+      console.log(JSON.stringify(result));
+    } catch (err: any) {
+      console.error(`Failed: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('gmail-archive')
+  .description('Archive Gmail threads (remove INBOX label)')
+  .argument('<thread-ids>', 'Comma-separated Gmail thread IDs')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .action(async (threadIdsStr: string, opts: { port: string }) => {
+    const { gmailArchive } = await import('../bus/plugin.js');
+    const threadIds = threadIdsStr.split(',').map(s => s.trim());
+    try {
+      const result = await gmailArchive(
+        threadIds, parseInt(opts.port, 10), process.env.BOB_DISPATCH_SECRET,
+      );
+      console.log(JSON.stringify(result));
+    } catch (err: any) {
+      console.error(`Failed: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('gmail-trash')
+  .description('Trash Gmail threads')
+  .argument('<thread-ids>', 'Comma-separated Gmail thread IDs')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .action(async (threadIdsStr: string, opts: { port: string }) => {
+    const { gmailTrash } = await import('../bus/plugin.js');
+    const threadIds = threadIdsStr.split(',').map(s => s.trim());
+    try {
+      const result = await gmailTrash(
+        threadIds, parseInt(opts.port, 10), process.env.BOB_DISPATCH_SECRET,
+      );
+      console.log(JSON.stringify(result));
+    } catch (err: any) {
+      console.error(`Failed: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('gmail-batch-modify')
+  .description('Batch modify labels on multiple Gmail threads')
+  .argument('<thread-ids>', 'Comma-separated Gmail thread IDs')
+  .option('--add <labels>', 'Comma-separated label IDs to add', '')
+  .option('--remove <labels>', 'Comma-separated label IDs to remove', '')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .action(async (threadIdsStr: string, opts: { add: string; remove: string; port: string }) => {
+    const { gmailBatchModify } = await import('../bus/plugin.js');
+    const threadIds = threadIdsStr.split(',').map(s => s.trim());
+    const addLabels = opts.add ? opts.add.split(',').map(s => s.trim()) : [];
+    const removeLabels = opts.remove ? opts.remove.split(',').map(s => s.trim()) : [];
+    if (!addLabels.length && !removeLabels.length) {
+      console.error('Must specify --add and/or --remove');
+      process.exit(1);
+    }
+    try {
+      const result = await gmailBatchModify(
+        threadIds, addLabels, removeLabels,
+        parseInt(opts.port, 10), process.env.BOB_DISPATCH_SECRET,
+      );
+      console.log(JSON.stringify(result));
+    } catch (err: any) {
+      console.error(`Failed: ${err.message || err}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('inbox-digest')
+  .description('Generate morning inbox digest via bob-runtime')
+  .option('--port <port>', 'bob-runtime port', '3001')
+  .option('--date <date>', 'Target date (YYYY-MM-DD)', '')
+  .action(async (opts: { port: string; date: string }) => {
+    const { dispatchPlugin } = await import('../bus/plugin.js');
+    try {
+      const metadata: Record<string, unknown> = { subtype: 'digest' };
+      if (opts.date) metadata.date = opts.date;
+      const result = await dispatchPlugin('inbox_os', {
+        task: 'Write morning inbox digest',
+        metadata,
+      }, parseInt(opts.port, 10), process.env.BOB_DISPATCH_SECRET);
+      console.log(JSON.stringify(result));
+    } catch (err: any) {
+      console.error(`Digest failed: ${err.message || err}`);
       process.exit(1);
     }
   });
@@ -2707,6 +2915,29 @@ busCommand
       console.log('\nRestart affected agents to apply the new settings:');
       console.log('  cortextos restart <agent-name>');
     }
+  });
+
+// -- Cost status command --
+
+busCommand
+  .command('cost-status')
+  .option('--agent <name>', 'Agent name (defaults to CTX_AGENT_NAME)')
+  .action((opts: { agent?: string }) => {
+    const env = resolveEnv();
+    const agentName = opts.agent || env.agentName;
+    if (!agentName) {
+      console.error('No agent specified. Use --agent <name> or set CTX_AGENT_NAME.');
+      process.exit(1);
+    }
+
+    const frameworkRoot = env.frameworkRoot;
+    const org = env.org || 'default';
+    const agentConfigPath = frameworkRoot
+      ? join(frameworkRoot, 'orgs', org, 'agents', agentName, 'config.json')
+      : undefined;
+
+    const result = getCostStatus(agentName, agentConfigPath);
+    console.log(JSON.stringify(result, null, 2));
   });
 
 function sleepMs(ms: number): Promise<void> {

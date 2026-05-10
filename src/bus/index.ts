@@ -67,3 +67,15 @@ export {
   type UpstreamResult,
   type RegisterCommandsResult,
 } from './metrics.js';
+export {
+  getCostStatus,
+  checkCostCaps,
+  resolveCaps,
+  scanAgentCosts,
+  scanAllAgentCosts,
+  type CostCaps,
+  type CostCapStatus,
+  type CostCapLayer,
+  type CostStatusResult,
+  type CostRecord,
+} from './cost-caps.js';

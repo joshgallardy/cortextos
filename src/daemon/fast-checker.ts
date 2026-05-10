@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import { hardRestart } from '../bus/system.js';
+import { checkCostCaps, type CostCapStatus, type CostCapLayer } from '../bus/cost-caps.js';
 import type { InboxMessage, BusPaths, TelegramMessage, TelegramCallbackQuery } from '../types/index.js';
 import { checkInbox, ackInbox } from '../bus/message.js';
 import { updateApproval } from '../bus/approval.js';
@@ -58,6 +59,11 @@ export class FastChecker {
   private ctxCircuitBrokenAt: number | null = null; // when circuit tripped (null = healthy)
   // Persisted to disk so --continue restarts don't reset the circuit breaker
   private ctxCircuitFile: string = '';
+
+  // Cost cap monitor state
+  private costLastCheckAt: number = 0;
+  private costLastStatus: CostCapStatus = 'ok';
+  private costAlertSentAt: number = 0; // dedup: 5min cooldown between alerts
 
   constructor(
     agent: AgentProcess,
@@ -211,6 +217,9 @@ export class FastChecker {
 
     // Context monitor: check usage thresholds and fire warnings/handoffs
     await this.checkContextStatus();
+
+    // Cost cap monitor: check spending thresholds (throttled to every 60s)
+    await this.checkCostStatus();
   }
 
   /**
@@ -882,6 +891,47 @@ Reply using: cortextos bus send-telegram ${chatId} '<your reply>'
       warn: config.ctx_warning_threshold ?? 70,
       handoff: config.ctx_handoff_threshold ?? 80,
     };
+  }
+
+  /**
+   * Cost cap monitor — throttled to every 60s.
+   * Scans JSONL logs, computes rolling costs, alerts on breach.
+   */
+  private async checkCostStatus(): Promise<void> {
+    const now = Date.now();
+    // Throttle: only check every 60 seconds
+    if (now - this.costLastCheckAt < 60_000) return;
+    this.costLastCheckAt = now;
+
+    const agentName = this.agent.name;
+    const org = process.env.CTX_ORG || 'default';
+    const frameworkRoot = this.frameworkRoot;
+    const agentConfigPath = join(frameworkRoot, 'orgs', org, 'agents', agentName, 'config.json');
+
+    const result = checkCostCaps(agentName, this.paths, org, agentConfigPath);
+
+    // Only act on status transitions or breaches
+    if (result.status === 'breached' && this.costLastStatus !== 'breached') {
+      // Send Telegram alert (dedup: 5min cooldown)
+      if (now - this.costAlertSentAt > 300_000 && this.telegramApi && this.chatId) {
+        const layer = result.breached_layer || 'unknown';
+        let alertMsg: string;
+        if (layer === 'day') {
+          alertMsg = `⚠️ Daily cost cap reached ($${result.day}/$${result.caps.day}). Agents idled. Reply 'reset' to resume or wait until midnight.`;
+        } else if (layer === 'hour') {
+          alertMsg = `⚠️ Hourly cost cap breached for ${agentName}: $${result.hour}/$${result.caps.hour}. New tasks queued until window rolls.`;
+        } else {
+          alertMsg = `⚠️ Per-task cost cap breached for ${agentName}. Check activity log.`;
+        }
+        this.telegramApi.sendMessage(this.chatId, alertMsg).catch(() => {});
+        this.costAlertSentAt = now;
+        this.log(`Cost cap BREACHED [${layer}]: hour=$${result.hour} day=$${result.day}`);
+      }
+    } else if (result.status === 'warning' && this.costLastStatus === 'ok') {
+      this.log(`Cost cap WARNING: hour=$${result.hour}/${result.caps.hour} day=$${result.day}/${result.caps.day}`);
+    }
+
+    this.costLastStatus = result.status;
   }
 
   /**

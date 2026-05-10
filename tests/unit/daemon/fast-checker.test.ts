@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('child_process', () => ({ execFile: vi.fn() }));
+vi.mock('../../../src/bus/cost-caps', () => ({
+  checkCostCaps: vi.fn().mockReturnValue({ status: 'ok', hour: 0, day: 0, caps: { task: 5, hour: 15, day: 30 } }),
+}));
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
