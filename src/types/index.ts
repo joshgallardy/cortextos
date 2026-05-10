@@ -390,6 +390,20 @@ export interface CronDefinition {
    * @default false (manual fire is allowed by default — opt-out model)
    */
   manualFireDisabled?: boolean;
+
+  /**
+   * Model override for this cron. When set, the daemon injects a `/model`
+   * command before firing the cron prompt so the agent session switches to
+   * the specified model for this task.
+   *
+   * Accepts aliases ("haiku", "sonnet", "opus") or full model IDs
+   * (e.g. "claude-haiku-4-5-20251001"). If omitted, the agent's session
+   * model is used (no switch injected).
+   *
+   * @example "haiku"
+   * @example "claude-sonnet-4-6"
+   */
+  model?: string;
 }
 
 // ---------------------------------------------------------------------------

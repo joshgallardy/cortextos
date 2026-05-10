@@ -20,6 +20,7 @@ import { nextFireFromCron } from '../daemon/cron-scheduler.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
 import { getCostStatus } from '../bus/cost-caps.js';
+import { isKnownModel } from '../bus/model-routing.js';
 import { resolvePaths } from '../utils/paths.js';
 import { resolveEnv } from '../utils/env.js';
 import { IPCClient } from '../daemon/ipc-server.js';
@@ -2077,7 +2078,8 @@ busCommand
   .argument('<interval>', 'Schedule: interval ("6h", "30m", "1d") or 5-field cron expr ("0 8 * * *")')
   .argument('<prompt...>', 'Prompt text injected when the cron fires (all remaining words joined)')
   .option('--desc <description>', 'Human-readable description (optional)')
-  .action(async (agent: string, name: string, interval: string, promptWords: string[], opts: { desc?: string }) => {
+  .option('--model <model>', 'Model override for this cron (haiku, sonnet, opus, or full model ID)')
+  .action(async (agent: string, name: string, interval: string, promptWords: string[], opts: { desc?: string; model?: string }) => {
     // Validate agent name format
     try { validateAgentName(agent); } catch (err) { console.error(String(err)); process.exit(1); }
 
@@ -2093,6 +2095,11 @@ busCommand
     let schedule: string;
     try { schedule = validateSchedule(interval); } catch (err) { console.error(String(err)); process.exit(1); }
 
+    // Validate model if provided
+    if (opts.model && !isKnownModel(opts.model)) {
+      console.warn(`Warning: '${opts.model}' is not a recognized model alias or ID. Proceeding anyway (will attempt at runtime).`);
+    }
+
     const prompt = promptWords.join(' ');
     const cron: CronDefinition = {
       name,
@@ -2101,6 +2108,7 @@ busCommand
       enabled: true,
       created_at: new Date().toISOString(),
       ...(opts.desc ? { description: opts.desc } : {}),
+      ...(opts.model ? { model: opts.model } : {}),
     };
 
     try {
@@ -2111,7 +2119,7 @@ busCommand
     }
 
     await signalCronReload(agent, env.instanceId);
-    console.log(`Added cron '${name}' for ${agent}`);
+    console.log(`Added cron '${name}' for ${agent}${opts.model ? ` (model: ${opts.model})` : ''}`);
   });
 
 busCommand
@@ -2191,6 +2199,7 @@ busCommand
       return {
         name: c.name,
         schedule: c.schedule,
+        model: c.model || '-',
         enabled: c.enabled ? 'yes' : 'no',
         last_fire: fmtTs(lastFire),
         next_fire: nextFire,
@@ -2201,18 +2210,19 @@ busCommand
     // Column widths
     const nameW = Math.max(4, ...rows.map(r => r.name.length));
     const schedW = Math.max(8, ...rows.map(r => r.schedule.length));
+    const modelW = Math.max(5, ...rows.map(r => r.model.length));
     const enW = 7;
     const lastW = 18;
     const nextW = 18;
 
     const pad = (s: string, w: number) => s.padEnd(w);
-    const sep = '-'.repeat(nameW + schedW + enW + lastW + nextW + 63 + 5);
+    const sep = '-'.repeat(nameW + schedW + modelW + enW + lastW + nextW + 63 + 7);
 
     console.log(`\nCrons for ${agent} (${rows.length})\n`);
-    console.log(`  ${pad('Name', nameW)}  ${pad('Schedule', schedW)}  ${pad('Enabled', enW)}  ${pad('Last Fire', lastW)}  ${pad('Next Fire', nextW)}  Prompt`);
+    console.log(`  ${pad('Name', nameW)}  ${pad('Schedule', schedW)}  ${pad('Model', modelW)}  ${pad('Enabled', enW)}  ${pad('Last Fire', lastW)}  ${pad('Next Fire', nextW)}  Prompt`);
     console.log(`  ${sep}`);
     for (const r of rows) {
-      console.log(`  ${pad(r.name, nameW)}  ${pad(r.schedule, schedW)}  ${pad(r.enabled, enW)}  ${pad(r.last_fire, lastW)}  ${pad(r.next_fire, nextW)}  ${r.prompt}`);
+      console.log(`  ${pad(r.name, nameW)}  ${pad(r.schedule, schedW)}  ${pad(r.model, modelW)}  ${pad(r.enabled, enW)}  ${pad(r.last_fire, lastW)}  ${pad(r.next_fire, nextW)}  ${r.prompt}`);
     }
     console.log('');
   });
@@ -2227,12 +2237,13 @@ busCommand
   .option('--prompt <p>', 'New prompt text')
   .option('--enabled <bool>', 'Enable (true) or disable (false) the cron')
   .option('--desc <d>', 'New description')
-  .action(async (agent: string, name: string, opts: { interval?: string; cronExpr?: string; prompt?: string; enabled?: string; desc?: string }) => {
+  .option('--model <m>', 'Model override (haiku, sonnet, opus, or full ID; use "none" to clear)')
+  .action(async (agent: string, name: string, opts: { interval?: string; cronExpr?: string; prompt?: string; enabled?: string; desc?: string; model?: string }) => {
     try { validateAgentName(agent); } catch (err) { console.error(String(err)); process.exit(1); }
 
     const rawSchedule = opts.interval ?? opts.cronExpr;
-    if (!rawSchedule && opts.prompt === undefined && opts.enabled === undefined && opts.desc === undefined) {
-      console.error('Error: at least one of --interval, --cron-expr, --prompt, --enabled, or --desc is required.');
+    if (!rawSchedule && opts.prompt === undefined && opts.enabled === undefined && opts.desc === undefined && opts.model === undefined) {
+      console.error('Error: at least one of --interval, --cron-expr, --prompt, --enabled, --desc, or --model is required.');
       process.exit(1);
     }
 
@@ -2253,6 +2264,17 @@ busCommand
     }
     if (opts.desc !== undefined) {
       patch.description = opts.desc;
+    }
+    if (opts.model !== undefined) {
+      if (opts.model === 'none' || opts.model === '') {
+        // Clear model override — use undefined to remove the field
+        patch.model = undefined;
+      } else {
+        if (!isKnownModel(opts.model)) {
+          console.warn(`Warning: '${opts.model}' is not a recognized model. Proceeding anyway.`);
+        }
+        patch.model = opts.model;
+      }
     }
 
     const ok = updateCronDef(agent, name, patch);

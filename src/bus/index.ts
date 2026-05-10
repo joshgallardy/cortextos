@@ -79,3 +79,11 @@ export {
   type CostStatusResult,
   type CostRecord,
 } from './cost-caps.js';
+export {
+  resolveModelId,
+  isKnownModel,
+  getModelAliases,
+  resolveEffectiveModel,
+  shouldSwitchModel,
+  type ModelResolutionContext,
+} from './model-routing.js';

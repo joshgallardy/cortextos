@@ -15,6 +15,7 @@ import { recordInboundTelegram, cacheLastSent, logOutboundMessage, buildRecentHi
 import { collectTelegramCommands, registerTelegramCommands } from '../bus/metrics.js';
 import { stripControlChars } from '../utils/validate.js';
 import { processMediaMessage } from '../telegram/media.js';
+import { shouldSwitchModel } from '../bus/model-routing.js';
 
 type LogFn = (msg: string) => void;
 
@@ -855,6 +856,20 @@ export class AgentManager {
       // Without the salt, every recurring cron after its first fire would be
       // dedup-rejected and treated as a dispatch failure.
       const firedAt = new Date().toISOString();
+
+      // Model routing: inject /model switch before cron prompt if cron specifies
+      // a different model than the agent's session default.
+      const sessionModel = entry.process['config']?.model;
+      const modelSwitch = shouldSwitchModel(cron.model, sessionModel);
+      if (modelSwitch) {
+        const modelInjected = this.injectAgent(agentName, `/model ${modelSwitch}`);
+        if (!modelInjected) {
+          throw new Error(`injectAgent returned false for model switch on agent "${agentName}" — agent may not be running`);
+        }
+        // Small delay to let the model switch complete before injecting cron prompt
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
       const injection = `[CRON FIRED ${firedAt}] ${cron.name}: ${prompt}`;
       const injected = this.injectAgent(agentName, injection);
       if (!injected) {
