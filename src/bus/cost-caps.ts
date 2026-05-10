@@ -10,11 +10,12 @@
  * Rolling windows: last 1h for hourly, last 24h for daily.
  */
 
-import { readdirSync, readFileSync, existsSync, statSync } from 'fs';
+import { readdirSync, readFileSync, existsSync, statSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import type { BusPaths } from '../types/index.js';
 import { logEvent } from './event.js';
+import { atomicWriteSync } from '../utils/atomic.js';
 
 // -- Pricing per million tokens (must match dashboard/src/lib/cost-parser.ts) --
 
@@ -340,4 +341,115 @@ export function checkCostCaps(
   }
 
   return result;
+}
+
+// -- Enforcement state --
+
+/**
+ * Enforcement state persisted to disk so cron scheduler and agents can check
+ * whether they're allowed to proceed.
+ */
+export interface CostEnforcementState {
+  /** Which layer triggered the enforcement */
+  layer: CostCapLayer;
+  /** When the enforcement was activated (ISO 8601) */
+  enforced_at: string;
+  /** The cost that triggered the breach */
+  cost_at_breach: number;
+  /** The cap that was exceeded */
+  cap_value: number;
+  /** Whether manual reset is required (T3/day only) */
+  requires_manual_reset: boolean;
+  /** Agent name */
+  agent: string;
+}
+
+const ENFORCEMENT_FILE = 'cost-cap-enforcement.json';
+
+function enforcementFilePath(stateDir: string): string {
+  return join(stateDir, ENFORCEMENT_FILE);
+}
+
+/**
+ * Write enforcement state to disk. Called by fast-checker when breach detected.
+ */
+export function writeCostEnforcement(stateDir: string, state: CostEnforcementState): void {
+  mkdirSync(stateDir, { recursive: true });
+  atomicWriteSync(enforcementFilePath(stateDir), JSON.stringify(state, null, 2));
+}
+
+/**
+ * Read enforcement state from disk. Returns null if no enforcement is active.
+ */
+export function readCostEnforcement(stateDir: string): CostEnforcementState | null {
+  const filePath = enforcementFilePath(stateDir);
+  if (!existsSync(filePath)) return null;
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clear enforcement state for a specific tier (or all tiers).
+ * Returns true if enforcement was cleared, false if nothing to clear.
+ */
+export function resetCostCap(stateDir: string, tier?: CostCapLayer): boolean {
+  const filePath = enforcementFilePath(stateDir);
+  if (!existsSync(filePath)) return false;
+
+  if (tier) {
+    // Only clear if the active enforcement matches the requested tier
+    const state = readCostEnforcement(stateDir);
+    if (!state || state.layer !== tier) return false;
+  }
+
+  try {
+    const { unlinkSync } = require('fs');
+    unlinkSync(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if an agent is currently under cost enforcement (idle/blocked).
+ * Used by cron scheduler onFire to decide whether to proceed.
+ */
+export function isAgentIdled(stateDir: string): { idled: boolean; reason?: string; layer?: CostCapLayer } {
+  const state = readCostEnforcement(stateDir);
+  if (!state) return { idled: false };
+
+  // T2 (hour): Auto-expires after the rolling window passes
+  if (state.layer === 'hour') {
+    const enforcedAt = new Date(state.enforced_at).getTime();
+    const elapsed = Date.now() - enforcedAt;
+    if (elapsed > ONE_HOUR_MS) {
+      // Hour window has rolled — auto-clear
+      try {
+        const { unlinkSync } = require('fs');
+        unlinkSync(enforcementFilePath(stateDir));
+      } catch { /* ignore */ }
+      return { idled: false };
+    }
+    return {
+      idled: true,
+      reason: `Hourly cost cap breached at $${state.cost_at_breach}/$${state.cap_value}. Auto-resumes when window rolls.`,
+      layer: 'hour',
+    };
+  }
+
+  // T3 (day): Requires manual reset
+  if (state.layer === 'day') {
+    return {
+      idled: true,
+      reason: `Daily cost cap breached at $${state.cost_at_breach}/$${state.cap_value}. Manual reset required: cortextos bus reset-cost-cap ${state.agent}`,
+      layer: 'day',
+    };
+  }
+
+  // T1 (task): Shouldn't idle the whole agent, but indicates task-level breach
+  return { idled: false };
 }

@@ -73,11 +73,16 @@ export {
   resolveCaps,
   scanAgentCosts,
   scanAllAgentCosts,
+  writeCostEnforcement,
+  readCostEnforcement,
+  resetCostCap,
+  isAgentIdled,
   type CostCaps,
   type CostCapStatus,
   type CostCapLayer,
   type CostStatusResult,
   type CostRecord,
+  type CostEnforcementState,
 } from './cost-caps.js';
 export {
   resolveModelId,

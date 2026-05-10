@@ -16,6 +16,7 @@ import { collectTelegramCommands, registerTelegramCommands } from '../bus/metric
 import { stripControlChars } from '../utils/validate.js';
 import { processMediaMessage } from '../telegram/media.js';
 import { shouldSwitchModel } from '../bus/model-routing.js';
+import { isAgentIdled } from '../bus/cost-caps.js';
 
 type LogFn = (msg: string) => void;
 
@@ -849,7 +850,20 @@ export class AgentManager {
       return;
     }
 
+    // Resolve stateDir for cost enforcement checks
+    const { homedir } = require('os');
+    const ctxRoot = process.env.CTX_ROOT ||
+      join(homedir(), '.cortextos', this.instanceId || 'default');
+    const agentStateDir = join(ctxRoot, 'state', agentName);
+
     const onFire = async (cron: CronDefinition): Promise<void> => {
+      // Cost enforcement gate: check if agent is idled due to cost cap breach
+      const idleCheck = isAgentIdled(agentStateDir);
+      if (idleCheck.idled) {
+        console.log(`[daemon] Cron "${cron.name}" blocked for ${agentName} — ${idleCheck.reason}`);
+        throw new Error(`Agent ${agentName} idled by cost enforcement [${idleCheck.layer}]`);
+      }
+
       const prompt = cron.prompt ?? `[cron] ${cron.name} fired`;
       // Salt with the fire timestamp so MessageDedup (which hashes the last 100
       // injects) does not reject identical cron prompts on subsequent fires.

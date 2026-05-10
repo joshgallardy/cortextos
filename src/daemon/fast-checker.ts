@@ -3,9 +3,9 @@ import { execFile } from 'child_process';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import { hardRestart } from '../bus/system.js';
-import { checkCostCaps, type CostCapStatus, type CostCapLayer } from '../bus/cost-caps.js';
+import { checkCostCaps, writeCostEnforcement, type CostCapStatus, type CostCapLayer, type CostEnforcementState } from '../bus/cost-caps.js';
 import type { InboxMessage, BusPaths, TelegramMessage, TelegramCallbackQuery } from '../types/index.js';
-import { checkInbox, ackInbox } from '../bus/message.js';
+import { checkInbox, ackInbox, sendMessage } from '../bus/message.js';
 import { updateApproval } from '../bus/approval.js';
 import { AgentProcess } from './agent-process.js';
 import type { TelegramAPI } from '../telegram/api.js';
@@ -896,6 +896,11 @@ Reply using: cortextos bus send-telegram ${chatId} '<your reply>'
   /**
    * Cost cap monitor — throttled to every 60s.
    * Scans JSONL logs, computes rolling costs, alerts on breach.
+   *
+   * ENFORCEMENT ACTIONS:
+   *   T1 (task): Block + notify orchestrating agent (via bus message)
+   *   T2 (hour): Idle agent (pause crons via enforcement state file) + alert chief
+   *   T3 (day):  Hard stop — write enforcement state requiring manual reset + alert chief
    */
   private async checkCostStatus(): Promise<void> {
     const now = Date.now();
@@ -912,21 +917,58 @@ Reply using: cortextos bus send-telegram ${chatId} '<your reply>'
 
     // Only act on status transitions or breaches
     if (result.status === 'breached' && this.costLastStatus !== 'breached') {
+      const layer = result.breached_layer || 'unknown';
+
+      // Write enforcement state to disk (T2/T3) so cron scheduler blocks execution
+      if (layer === 'hour' || layer === 'day') {
+        const state: CostEnforcementState = {
+          layer,
+          enforced_at: new Date(now).toISOString(),
+          cost_at_breach: layer === 'hour' ? result.hour : result.day,
+          cap_value: layer === 'hour' ? result.caps.hour : result.caps.day,
+          requires_manual_reset: layer === 'day',
+          agent: agentName,
+        };
+        writeCostEnforcement(this.paths.stateDir, state);
+        this.log(`Cost enforcement ACTIVATED [${layer}]: wrote enforcement state to ${this.paths.stateDir}`);
+
+        // Alert chief via bus message
+        try {
+          const alertText = layer === 'day'
+            ? `COST CAP BREACHED [daily]: ${agentName} hit $${result.day}/$${result.caps.day}. Agent idled — manual reset required: cortextos bus reset-cost-cap ${agentName}`
+            : `COST CAP BREACHED [hourly]: ${agentName} hit $${result.hour}/$${result.caps.hour}. Agent idled — auto-resumes when window rolls.`;
+          sendMessage(this.paths, agentName, 'chief', 'urgent', alertText);
+        } catch {
+          this.log('Failed to send cost breach alert to chief via bus');
+        }
+      }
+
+      // T1 (task): Notify the agent directly via PTY injection
+      if (layer === 'task') {
+        try {
+          this.agent.injectMessage(
+            `[SYSTEM] Per-task cost cap breached ($${result.caps.task}). Current task spending exceeded limit. Wrap up current work and avoid starting new expensive operations.`
+          );
+        } catch {
+          this.log('Failed to inject task cost cap notification');
+        }
+      }
+
       // Send Telegram alert (dedup: 5min cooldown)
       if (now - this.costAlertSentAt > 300_000 && this.telegramApi && this.chatId) {
-        const layer = result.breached_layer || 'unknown';
         let alertMsg: string;
         if (layer === 'day') {
-          alertMsg = `⚠️ Daily cost cap reached ($${result.day}/$${result.caps.day}). Agents idled. Reply 'reset' to resume or wait until midnight.`;
+          alertMsg = `⚠️ Daily cost cap reached ($${result.day}/$${result.caps.day}). Agent idled — manual reset required. Run: cortextos bus reset-cost-cap ${agentName}`;
         } else if (layer === 'hour') {
-          alertMsg = `⚠️ Hourly cost cap breached for ${agentName}: $${result.hour}/$${result.caps.hour}. New tasks queued until window rolls.`;
+          alertMsg = `⚠️ Hourly cost cap breached for ${agentName}: $${result.hour}/$${result.caps.hour}. Agent idled — auto-resumes when window rolls.`;
         } else {
-          alertMsg = `⚠️ Per-task cost cap breached for ${agentName}. Check activity log.`;
+          alertMsg = `⚠️ Per-task cost cap breached for ${agentName}. Agent notified to wrap up current task.`;
         }
         this.telegramApi.sendMessage(this.chatId, alertMsg).catch(() => {});
         this.costAlertSentAt = now;
-        this.log(`Cost cap BREACHED [${layer}]: hour=$${result.hour} day=$${result.day}`);
       }
+
+      this.log(`Cost cap BREACHED [${layer}]: hour=$${result.hour} day=$${result.day}`);
     } else if (result.status === 'warning' && this.costLastStatus === 'ok') {
       this.log(`Cost cap WARNING: hour=$${result.hour}/${result.caps.hour} day=$${result.day}/${result.caps.day}`);
     }

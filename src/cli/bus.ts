@@ -19,7 +19,7 @@ import { addCron, removeCron, readCrons, updateCron as updateCronDef, getCronByN
 import { nextFireFromCron } from '../daemon/cron-scheduler.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
-import { getCostStatus } from '../bus/cost-caps.js';
+import { getCostStatus, resetCostCap, readCostEnforcement } from '../bus/cost-caps.js';
 import { isKnownModel } from '../bus/model-routing.js';
 import { resolvePaths } from '../utils/paths.js';
 import { resolveEnv } from '../utils/env.js';
@@ -2959,7 +2959,56 @@ busCommand
       : undefined;
 
     const result = getCostStatus(agentName, agentConfigPath);
-    console.log(JSON.stringify(result, null, 2));
+
+    // Include enforcement state if active
+    const paths = resolvePaths(agentName, env.instanceId, org);
+    const enforcement = readCostEnforcement(paths.stateDir);
+    const output = enforcement
+      ? { ...result, enforcement }
+      : result;
+
+    console.log(JSON.stringify(output, null, 2));
+  });
+
+busCommand
+  .command('reset-cost-cap')
+  .description('Clear cost cap enforcement for an agent, resuming normal operation')
+  .argument('<agent>', 'Agent name')
+  .argument('[tier]', 'Tier to reset: task, hour, day (default: any active tier)')
+  .action(async (agent: string, tier?: string) => {
+    try { validateAgentName(agent); } catch (err) { console.error(String(err)); process.exit(1); }
+
+    const validTiers = ['task', 'hour', 'day'];
+    if (tier && !validTiers.includes(tier)) {
+      console.error(`Error: tier must be one of: ${validTiers.join(', ')}`);
+      process.exit(1);
+    }
+
+    const env = resolveEnv();
+    const org = env.org || 'default';
+    const paths = resolvePaths(agent, env.instanceId, org);
+
+    // Show current enforcement state before reset
+    const current = readCostEnforcement(paths.stateDir);
+    if (!current) {
+      console.log(`No active cost enforcement for ${agent}.`);
+      return;
+    }
+
+    const cleared = resetCostCap(paths.stateDir, tier as any);
+    if (cleared) {
+      console.log(`Cost cap enforcement cleared for ${agent} (was: ${current.layer} layer, breached at $${current.cost_at_breach}/$${current.cap_value}).`);
+      console.log('Agent will resume normal cron processing on next scheduler tick.');
+
+      // Signal cron reload so the scheduler picks up immediately
+      await signalCronReload(agent, env.instanceId);
+    } else {
+      if (tier) {
+        console.log(`No active ${tier} enforcement for ${agent} (current enforcement is ${current.layer} layer).`);
+      } else {
+        console.log(`Failed to clear enforcement for ${agent}.`);
+      }
+    }
   });
 
 function sleepMs(ms: number): Promise<void> {
