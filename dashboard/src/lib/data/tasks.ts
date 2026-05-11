@@ -4,6 +4,60 @@
 import { db } from '@/lib/db';
 import type { Task, TaskFilters } from '@/lib/types';
 
+// ---------------------------------------------------------------------------
+// Urgency scoring
+// ---------------------------------------------------------------------------
+
+const PRIORITY_WEIGHT: Record<string, number> = {
+  critical: 40,
+  urgent: 30,
+  high: 20,
+  normal: 10,
+  low: 0,
+};
+
+/**
+ * Compute a composite urgency score for a task (0-100).
+ * Factors: priority weight, age (hours since created), staleness (hours
+ * since last update), and deadline proximity (hours until due).
+ * Completed tasks always score 0.
+ */
+export function computeUrgencyScore(task: Task): number {
+  if (task.status === 'completed') return 0;
+
+  const now = Date.now();
+  let score = PRIORITY_WEIGHT[task.priority] ?? 10;
+
+  // Age factor: +1 point per 6 hours of age, max 20
+  const ageMs = now - new Date(task.created_at).getTime();
+  const ageHours = ageMs / (1000 * 60 * 60);
+  score += Math.min(20, Math.floor(ageHours / 6));
+
+  // Staleness factor: +1 point per 4 hours since last update, max 20
+  const lastTouch = task.updated_at || task.created_at;
+  const staleMs = now - new Date(lastTouch).getTime();
+  const staleHours = staleMs / (1000 * 60 * 60);
+  score += Math.min(20, Math.floor(staleHours / 4));
+
+  // Deadline proximity: up to +20 points as deadline approaches
+  if (task.due_date) {
+    const dueMs = new Date(task.due_date).getTime() - now;
+    const dueHours = dueMs / (1000 * 60 * 60);
+    if (dueHours <= 0) {
+      // Overdue — max deadline urgency
+      score += 20;
+    } else if (dueHours <= 24) {
+      score += 15;
+    } else if (dueHours <= 72) {
+      score += 10;
+    } else if (dueHours <= 168) {
+      score += 5;
+    }
+  }
+
+  return Math.min(100, score);
+}
+
 /**
  * Get tasks with optional filters.
  * Returns newest first by default.
@@ -51,7 +105,7 @@ export function getTasks(filters?: TaskFilters): Task[] {
     const rows = db
       .prepare(
         `SELECT id, title, description, status, priority, assignee, org, project,
-                needs_approval, created_at, updated_at, completed_at, notes, source_file
+                needs_approval, created_at, updated_at, completed_at, due_date, waiting_on, notes, source_file
          FROM tasks ${where}
          ORDER BY created_at DESC`
       )
@@ -72,7 +126,7 @@ export function getTaskById(id: string): Task | null {
     const row = db
       .prepare(
         `SELECT id, title, description, status, priority, assignee, org, project,
-                needs_approval, created_at, updated_at, completed_at, notes, source_file
+                needs_approval, created_at, updated_at, completed_at, due_date, waiting_on, notes, source_file
          FROM tasks WHERE id = ?`
       )
       .get(id) as Record<string, unknown> | undefined;
@@ -120,7 +174,7 @@ export function getTasksCompletedToday(org?: string): Task[] {
     const rows = db
       .prepare(
         `SELECT id, title, description, status, priority, assignee, org, project,
-                needs_approval, created_at, updated_at, completed_at, notes, source_file
+                needs_approval, created_at, updated_at, completed_at, due_date, waiting_on, notes, source_file
          FROM tasks ${where}
          ORDER BY completed_at DESC`
       )
@@ -176,7 +230,7 @@ export function getTaskCount(org?: string, status?: string): number {
 // ---------------------------------------------------------------------------
 
 function rowToTask(row: Record<string, unknown>): Task {
-  return {
+  const task: Task = {
     id: row.id as string,
     title: row.title as string,
     description: (row.description as string) ?? undefined,
@@ -189,7 +243,11 @@ function rowToTask(row: Record<string, unknown>): Task {
     created_at: row.created_at as string,
     updated_at: (row.updated_at as string) ?? undefined,
     completed_at: (row.completed_at as string) ?? undefined,
+    due_date: (row.due_date as string) ?? undefined,
+    waiting_on: (row.waiting_on as string) ?? undefined,
     notes: (row.notes as string) ?? undefined,
     source_file: (row.source_file as string) ?? undefined,
   };
+  task.urgency_score = computeUrgencyScore(task);
+  return task;
 }

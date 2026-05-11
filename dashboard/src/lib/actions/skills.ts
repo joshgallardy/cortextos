@@ -175,7 +175,7 @@ export async function installSkill(
 
     fs.symlinkSync(catalogDir, linkPath, 'dir');
 
-    revalidatePath('/skills');
+    revalidatePath('/system/skills');
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -201,7 +201,7 @@ export async function uninstallSkill(
       return { success: false, error: `Skill not installed: ${slug} for ${org}/${agent}` };
     }
 
-    revalidatePath('/skills');
+    revalidatePath('/system/skills');
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };

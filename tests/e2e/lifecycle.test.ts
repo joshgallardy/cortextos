@@ -263,7 +263,7 @@ describe('E2E Lifecycle', () => {
       const expectedFields = [
         'id', 'title', 'description', 'type', 'needs_approval', 'status',
         'assigned_to', 'created_by', 'org', 'priority', 'project',
-        'kpi_key', 'created_at', 'updated_at', 'completed_at', 'due_date', 'archived',
+        'kpi_key', 'created_at', 'updated_at', 'completed_at', 'due_date', 'waiting_on', 'archived',
       ];
       expect(Object.keys(task).sort()).toEqual(expectedFields.sort());
     });

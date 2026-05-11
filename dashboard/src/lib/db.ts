@@ -62,7 +62,9 @@ function initializeSchema(db: Database.Database): void {
       updated_at TEXT,
       completed_at TEXT,
       notes TEXT,
-      source_file TEXT
+      source_file TEXT,
+      due_date TEXT,
+      waiting_on TEXT
     );
 
     CREATE TABLE IF NOT EXISTS approvals (
@@ -174,6 +176,10 @@ function initializeSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_messages_org ON messages(org);
     CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
   `);
+
+  // Migrations: add columns to existing tables (safe to re-run)
+  try { db.exec('ALTER TABLE tasks ADD COLUMN due_date TEXT'); } catch { /* already exists */ }
+  try { db.exec('ALTER TABLE tasks ADD COLUMN waiting_on TEXT'); } catch { /* already exists */ }
 }
 
 // globalThis singleton survives Next.js hot reload

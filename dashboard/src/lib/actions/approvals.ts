@@ -62,7 +62,7 @@ export async function resolveApproval(
     }
 
     // Revalidate pages that show approval data
-    revalidatePath('/approvals');
+    revalidatePath('/system/approvals');
     revalidatePath('/'); // Overview "Action Required" section
 
     return { success: true };

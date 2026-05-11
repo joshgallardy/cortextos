@@ -416,7 +416,7 @@ export default function WorkflowsPage() {
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            onClick={() => router.push('/workflows/new')}
+            onClick={() => router.push('/system/workflows/new')}
           >
             <IconPlus size={14} className="mr-1" />
             New Cron
@@ -444,7 +444,7 @@ export default function WorkflowsPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-medium">Fleet Health</CardTitle>
             <button
-              onClick={() => router.push('/workflows/health')}
+              onClick={() => router.push('/system/workflows/health')}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               View all

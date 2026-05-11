@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Sidebar } from './sidebar';
 import { Topbar } from './topbar';
 import { BottomNav } from './bottom-nav';
@@ -28,6 +29,8 @@ export function DashboardShell({ orgs, children }: DashboardShellProps) {
     return 'all';
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+  const showSystemSidebar = pathname.startsWith('/system');
 
   // Persist org selection to localStorage
   useEffect(() => {
@@ -37,31 +40,35 @@ export function DashboardShell({ orgs, children }: DashboardShellProps) {
   return (
     <OrgContext.Provider value={{ currentOrg, setCurrentOrg, orgs }}>
       <div className="flex h-screen">
-        {/* Desktop sidebar */}
-        <div className="hidden md:block">
-          <Sidebar onNavigate={() => {}} />
-        </div>
+        {/* Desktop sidebar — only on system view */}
+        {showSystemSidebar && (
+          <div className="hidden md:block">
+            <Sidebar onNavigate={() => {}} />
+          </div>
+        )}
 
-        {/* Mobile sidebar sheet */}
-        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-          <SheetContent side="left" className="w-60 p-0" showCloseButton={false}>
-            <Sidebar onNavigate={() => setSidebarOpen(false)} />
-          </SheetContent>
-        </Sheet>
+        {/* Mobile sidebar sheet — only on system view */}
+        {showSystemSidebar && (
+          <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+            <SheetContent side="left" className="w-60 p-0" showCloseButton={false}>
+              <Sidebar onNavigate={() => setSidebarOpen(false)} />
+            </SheetContent>
+          </Sheet>
+        )}
 
         <div className="flex flex-1 flex-col overflow-hidden">
           <Topbar
             orgs={orgs}
             currentOrg={currentOrg}
             onOrgChange={setCurrentOrg}
-            onMenuClick={() => setSidebarOpen(true)}
+            onMenuClick={showSystemSidebar ? () => setSidebarOpen(true) : undefined}
           />
           <main className="flex-1 overflow-auto p-4 pb-20 md:pb-5 md:p-5 lg:p-6 bg-background">
             {children}
           </main>
 
-          {/* Mobile bottom navigation */}
-          <BottomNav />
+          {/* Mobile bottom navigation — only on system view */}
+          {showSystemSidebar && <BottomNav />}
         </div>
       </div>
     </OrgContext.Provider>

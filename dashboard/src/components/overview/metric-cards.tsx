@@ -70,21 +70,21 @@ export function MetricCards({
         value={`${agentsOnline}/${agentsTotal}`}
         sublabel={agentsOnline === agentsTotal ? 'All systems go' : `${agentsTotal - agentsOnline} offline`}
         icon={<IconRobot size={18} className="text-primary" />}
-        href="/agents"
+        href="/system/agents"
       />
       <MetricCard
         label="Tasks Today"
         value={tasksCompleted}
         sublabel={`${tasksInProgress} active, ${tasksPending} queued`}
         icon={<IconChecklist size={18} className="text-primary" />}
-        href="/tasks"
+        href="/system/tasks"
       />
       <MetricCard
         label="Approvals"
         value={pendingApprovals}
         sublabel={pendingApprovals === 0 ? 'Queue clear' : 'Awaiting review'}
         icon={<IconShieldCheck size={18} className="text-primary" />}
-        href="/approvals"
+        href="/system/approvals"
       />
       <MetricCard
         label="Blocked"

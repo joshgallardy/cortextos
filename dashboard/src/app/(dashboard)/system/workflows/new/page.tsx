@@ -34,7 +34,7 @@ export default function NewCronPage() {
   }, [fetchAgents]);
 
   const handleSuccess = () => {
-    router.push('/workflows');
+    router.push('/system/workflows');
   };
 
   return (
@@ -42,7 +42,7 @@ export default function NewCronPage() {
       {/* Back nav */}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => router.push('/workflows')}
+          onClick={() => router.push('/system/workflows')}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <IconArrowLeft size={15} />

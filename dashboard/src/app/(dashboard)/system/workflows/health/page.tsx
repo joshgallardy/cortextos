@@ -185,7 +185,7 @@ export default function FleetHealthPage() {
     <div className="space-y-6">
       {/* Back nav */}
       <button
-        onClick={() => router.push('/workflows')}
+        onClick={() => router.push('/system/workflows')}
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <IconArrowLeft size={15} />

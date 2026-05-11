@@ -176,7 +176,7 @@ export async function saveTelegramConfig(
 
     fs.writeFileSync(envPath, newLines.join('\n'), 'utf-8');
 
-    revalidatePath('/settings');
+    revalidatePath('/system/settings');
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -217,7 +217,7 @@ export async function saveSystemConfig(config: SystemConfig): Promise<ActionResu
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
     fs.writeFileSync(SYSTEM_CONFIG_PATH, JSON.stringify(validated, null, 2), 'utf-8');
 
-    revalidatePath('/settings');
+    revalidatePath('/system/settings');
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -252,7 +252,7 @@ export async function addUser(username: string, password: string): Promise<Actio
     const hash = await bcrypt.hash(password, 12);
     db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run(trimmed, hash);
 
-    revalidatePath('/settings');
+    revalidatePath('/system/settings');
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -272,7 +272,7 @@ export async function deleteUser(userId: number): Promise<ActionResult> {
       return { success: false, error: 'User not found' };
     }
 
-    revalidatePath('/settings');
+    revalidatePath('/system/settings');
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -443,7 +443,7 @@ export async function addAllowedRoot(rawPath: string): Promise<ActionResult> {
   fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2));
   fs.renameSync(tmpPath, configPath);
 
-  revalidatePath('/settings');
+  revalidatePath('/system/settings');
   return { success: true };
 }
 
@@ -472,6 +472,6 @@ export async function removeAllowedRoot(rawPath: string): Promise<ActionResult> 
   fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2));
   fs.renameSync(tmpPath, configPath);
 
-  revalidatePath('/settings');
+  revalidatePath('/system/settings');
   return { success: true };
 }

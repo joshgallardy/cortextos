@@ -66,9 +66,12 @@ export interface Task {
   created_at: string;
   updated_at?: string;
   completed_at?: string;
+  due_date?: string;
+  waiting_on?: string;
   notes?: string;
   source_file?: string;
   outputs?: TaskOutput[];
+  urgency_score?: number;
 }
 
 // -- Approval Types --

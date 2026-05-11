@@ -76,7 +76,7 @@ export default async function AgentDetailPage({
           </div>
         </div>
 
-        <Link href="/agents">
+        <Link href="/system/agents">
           <Button variant="outline" size="sm">
             Back to Roster
           </Button>

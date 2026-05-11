@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { signOut, useSession } from 'next-auth/react';
-import { IconSun, IconMoon, IconLogout, IconMenu2 } from '@tabler/icons-react';
+import { IconSun, IconMoon, IconLogout, IconMenu2, IconUser, IconCpu } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { OrgSelector } from './org-selector';
+import { cn } from '@/lib/utils';
 
 interface TopbarProps {
   orgs: string[];
@@ -24,6 +27,9 @@ interface TopbarProps {
 export function Topbar({ orgs, currentOrg, onOrgChange, onMenuClick }: TopbarProps) {
   const { theme, setTheme } = useTheme();
   const { data: session } = useSession();
+  const pathname = usePathname();
+  const isJoshView = pathname.startsWith('/josh');
+  const isSystemView = pathname.startsWith('/system');
 
   const username = session?.user?.name ?? 'User';
   const initials = username
@@ -49,6 +55,30 @@ export function Topbar({ orgs, currentOrg, onOrgChange, onMenuClick }: TopbarPro
           </Button>
         )}
         <OrgSelector orgs={orgs} currentOrg={currentOrg} onOrgChange={onOrgChange} />
+
+        {/* View switcher */}
+        <div className="hidden sm:flex items-center gap-1 ml-4 rounded-lg border bg-muted/30 p-0.5">
+          <Link
+            href="/josh"
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+              isJoshView ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <IconUser size={13} />
+            Josh
+          </Link>
+          <Link
+            href="/system"
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+              isSystemView ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <IconCpu size={13} />
+            System
+          </Link>
+        </div>
       </div>
 
       {/* Right: Dark mode toggle + User menu */}

@@ -123,7 +123,7 @@ export default function CronDetailPage({
       const data = await res.json().catch(() => ({}));
       throw new Error((data as { error?: string }).error ?? 'Failed to delete cron.');
     }
-    router.push('/workflows');
+    router.push('/system/workflows');
   };
 
   // Build form initial values from cron row
@@ -145,7 +145,7 @@ export default function CronDetailPage({
         {/* Back nav */}
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push('/workflows')}
+            onClick={() => router.push('/system/workflows')}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <IconArrowLeft size={15} />

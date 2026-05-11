@@ -55,6 +55,7 @@ export interface Task {
   updated_at: string; // ISO 8601
   completed_at: string | null;
   due_date: string | null;
+  waiting_on: string | null;
   archived: boolean;
   result?: string;
   /** Linked deliverables (files saved via `cortextos bus save-output`). */

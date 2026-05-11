@@ -34,7 +34,7 @@ function logEvent(category: string, data: Record<string, unknown>): void {
 
 function revalidate(): void {
   revalidatePath('/');
-  revalidatePath('/strategy');
+  revalidatePath('/system/strategy');
 }
 
 // ---------------------------------------------------------------------------
