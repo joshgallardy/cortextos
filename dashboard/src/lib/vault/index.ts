@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
 
-const VAULT_PATH = process.env.VAULT_PATH || path.join(process.env.HOME || '~', 'SecondBrain');
+const VAULT_PATH = process.env.VAULT_PATH || path.join(process.env.HOME || '~', 'Documents', 'SecondBrain');
 
 export interface VaultNote {
   frontmatter: Record<string, unknown>;
