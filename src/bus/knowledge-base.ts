@@ -162,11 +162,19 @@ export function queryKnowledgeBase(
       collections.push(`shared-${org}`);
       break;
     case 'private':
-      collections.push(agent ? `agent-${agent}` : `shared-${org}`);
+      if (agent) {
+        collections.push(`agent-${agent}`);
+        collections.push(`memory-${agent}`);
+      } else {
+        collections.push(`shared-${org}`);
+      }
       break;
     case 'all':
       collections.push(`shared-${org}`);
-      if (agent) collections.push(`agent-${agent}`);
+      if (agent) {
+        collections.push(`agent-${agent}`);
+        collections.push(`memory-${agent}`);
+      }
       break;
   }
 

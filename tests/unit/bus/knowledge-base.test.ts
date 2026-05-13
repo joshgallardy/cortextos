@@ -181,6 +181,67 @@ describe('queryKnowledgeBase — graceful missing-config', () => {
   });
 });
 
+describe('queryKnowledgeBase — scope includes memory collection', () => {
+  it('scope "all" queries shared, agent, AND memory collections', () => {
+    mockConfiguredKb();
+    execFileSyncMock.mockReturnValue(JSON.stringify({ results: [] }));
+
+    queryKnowledgeBase(dummyPaths, 'test query', {
+      ...baseOptions,
+      scope: 'all',
+    });
+
+    // Should have been called 3 times: shared-TestOrg, agent-tester, memory-tester
+    expect(execFileSyncMock).toHaveBeenCalledTimes(3);
+    const collections = execFileSyncMock.mock.calls.map(
+      (call: any[]) => {
+        const argv = call[1] as string[];
+        const colIdx = argv.indexOf('--collection');
+        return colIdx >= 0 ? argv[colIdx + 1] : null;
+      },
+    );
+    expect(collections).toContain('shared-TestOrg');
+    expect(collections).toContain('agent-tester');
+    expect(collections).toContain('memory-tester');
+  });
+
+  it('scope "private" queries agent AND memory collections', () => {
+    mockConfiguredKb();
+    execFileSyncMock.mockReturnValue(JSON.stringify({ results: [] }));
+
+    queryKnowledgeBase(dummyPaths, 'test query', {
+      ...baseOptions,
+      scope: 'private',
+    });
+
+    expect(execFileSyncMock).toHaveBeenCalledTimes(2);
+    const collections = execFileSyncMock.mock.calls.map(
+      (call: any[]) => {
+        const argv = call[1] as string[];
+        const colIdx = argv.indexOf('--collection');
+        return colIdx >= 0 ? argv[colIdx + 1] : null;
+      },
+    );
+    expect(collections).toContain('agent-tester');
+    expect(collections).toContain('memory-tester');
+  });
+
+  it('scope "shared" only queries shared collection (no memory)', () => {
+    mockConfiguredKb();
+    execFileSyncMock.mockReturnValue(JSON.stringify({ results: [] }));
+
+    queryKnowledgeBase(dummyPaths, 'test query', {
+      ...baseOptions,
+      scope: 'shared',
+    });
+
+    expect(execFileSyncMock).toHaveBeenCalledTimes(1);
+    const argv = execFileSyncMock.mock.calls[0][1] as string[];
+    const colIdx = argv.indexOf('--collection');
+    expect(argv[colIdx + 1]).toBe('shared-TestOrg');
+  });
+});
+
 describe('kb warn messages — UX invariants', () => {
   it('both warn messages name the org and suggest "run setup"', () => {
     // Drive ingest path

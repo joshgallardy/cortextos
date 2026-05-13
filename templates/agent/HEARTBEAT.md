@@ -134,11 +134,17 @@ Full reference: `.claude/skills/knowledge-base/SKILL.md`
 Keep your memory collection searchable and current:
 
 ```bash
-cortextos bus kb-ingest ./MEMORY.md ./memory/$(date -u +%Y-%m-%d).md \
+# Rolling 3-day ingest: today + last 2 days of daily memory
+MEMORY_FILES="./MEMORY.md"
+for d in 0 1 2; do
+  F="./memory/$(date -u -v-${d}d +%Y-%m-%d 2>/dev/null || date -u -d "$d days ago" +%Y-%m-%d).md"
+  [ -f "$F" ] && MEMORY_FILES="$MEMORY_FILES $F"
+done
+cortextos bus kb-ingest $MEMORY_FILES \
   --org $CTX_ORG --agent $CTX_AGENT_NAME --scope private --collection memory-$CTX_AGENT_NAME --force
 ```
 
-This runs automatically on every heartbeat cycle. It ensures past experiences, user preferences, and learned patterns are semantically searchable for future tasks. Skip if GEMINI_API_KEY is not configured.
+This runs automatically on every heartbeat cycle. It ensures past experiences, user preferences, and learned patterns are semantically searchable for future tasks. The rolling 3-day window keeps recent context available beyond just today's file. Skip if GEMINI_API_KEY is not configured.
 
 ---
 

@@ -57,7 +57,7 @@ export function Topbar({ orgs, currentOrg, onOrgChange, onMenuClick }: TopbarPro
         <OrgSelector orgs={orgs} currentOrg={currentOrg} onOrgChange={onOrgChange} />
 
         {/* View switcher */}
-        <div className="hidden sm:flex items-center gap-1 ml-4 rounded-lg border bg-muted/30 p-0.5">
+        <div className="flex items-center gap-1 ml-2 sm:ml-4 rounded-lg border bg-muted/30 p-0.5">
           <Link
             href="/josh"
             className={cn(

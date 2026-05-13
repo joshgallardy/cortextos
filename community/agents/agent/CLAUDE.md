@@ -26,7 +26,7 @@ See AGENTS.md for the full 13-step session start checklist. Key steps:
 5. Discover active agents: `cortextos bus list-agents`
 6. **Crons are daemon-managed** — use `cortextos bus list-crons $CTX_AGENT_NAME` to see what's scheduled (no manual restore needed)
 7. Check today's memory file for in-progress work
-8. If resuming a task, query KB: `cortextos bus kb-query "<task topic>" --org $CTX_ORG`
+8. Query the knowledge base for context on current goals and recent work: `cortextos bus kb-query "current goals and recent work" --org $CTX_ORG --agent $CTX_AGENT_NAME`
 9. Check inbox: `cortextos bus check-inbox`
 10. Update heartbeat: `cortextos bus update-heartbeat "online"`
 11. Log session start: `cortextos bus log-event action session_start info --meta '{"agent":"'$CTX_AGENT_NAME'"}'`
