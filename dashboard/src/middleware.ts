@@ -81,6 +81,22 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // Check for mobile token auth (?token=<MOBILE_TOKEN> in URL)
+  // Allows bookmarkable mobile access to Josh routes without full login
+  const mobileToken = process.env.MOBILE_TOKEN;
+  const urlToken = request.nextUrl.searchParams.get('token');
+  const hasMobileToken = !!(mobileToken && urlToken && mobileToken.length >= 16 && urlToken === mobileToken);
+
+  if (hasMobileToken && (pathname.startsWith('/josh') || pathname.startsWith('/api/workout'))) {
+    const response = NextResponse.next();
+    response.headers.set('Access-Control-Allow-Origin', corsOrigin);
+    response.headers.set('Vary', 'Origin');
+    response.headers.set('X-Frame-Options', 'DENY');
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    response.headers.set('Referrer-Policy', 'no-referrer');
+    return response;
+  }
+
   // Check for next-auth session token cookie (web dashboard)
   const hasSession =
     request.cookies.has('authjs.session-token') ||

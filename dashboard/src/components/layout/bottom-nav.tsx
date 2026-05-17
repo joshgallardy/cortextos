@@ -24,22 +24,22 @@ import {
 import { cn } from '@/lib/utils';
 
 const mainTabs = [
-  { label: 'Overview', href: '/', icon: IconLayoutDashboard },
-  { label: 'Tasks', href: '/tasks', icon: IconListCheck },
-  { label: 'Approvals', href: '/approvals', icon: IconShieldCheck },
-  { label: 'Analytics', href: '/analytics', icon: IconChartDots3 },
+  { label: 'Overview', href: '/system', icon: IconLayoutDashboard },
+  { label: 'Tasks', href: '/system/tasks', icon: IconListCheck },
+  { label: 'Approvals', href: '/system/approvals', icon: IconShieldCheck },
+  { label: 'Analytics', href: '/system/analytics', icon: IconChartDots3 },
 ];
 
 const morePages = [
-  { label: 'Agents', href: '/agents', icon: IconRobot },
-  { label: 'Comms', href: '/comms', icon: IconMessages },
-  { label: 'Activity', href: '/activity', icon: IconActivity },
-  { label: 'Knowledge Base', href: '/knowledge-base', icon: IconBook2 },
-  { label: 'Workflows', href: '/workflows', icon: IconClock },
-  { label: 'Strategy', href: '/strategy', icon: IconTarget },
-  { label: 'Experiments', href: '/experiments', icon: IconFlask },
-  { label: 'Skills', href: '/skills', icon: IconPuzzle },
-  { label: 'Settings', href: '/settings', icon: IconSettings },
+  { label: 'Agents', href: '/system/agents', icon: IconRobot },
+  { label: 'Comms', href: '/system/comms', icon: IconMessages },
+  { label: 'Activity', href: '/system/activity', icon: IconActivity },
+  { label: 'Knowledge Base', href: '/system/knowledge-base', icon: IconBook2 },
+  { label: 'Workflows', href: '/system/workflows', icon: IconClock },
+  { label: 'Strategy', href: '/system/strategy', icon: IconTarget },
+  { label: 'Experiments', href: '/system/experiments', icon: IconFlask },
+  { label: 'Skills', href: '/system/skills', icon: IconPuzzle },
+  { label: 'Settings', href: '/system/settings', icon: IconSettings },
 ];
 
 export function BottomNav() {
@@ -55,7 +55,7 @@ export function BottomNav() {
   }
 
   function isActive(href: string) {
-    if (href === '/') return pathname === '/';
+    if (href === '/system') return pathname === '/system';
     return pathname.startsWith(href);
   }
 
