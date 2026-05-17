@@ -13,11 +13,25 @@ import { PriorityBadge, StatusBadge, OrgBadge, TimeAgo } from '@/components/shar
 import { IconArrowsSort, IconSortAscending, IconSortDescending } from '@tabler/icons-react';
 import type { Task } from '@/lib/types';
 
-type SortField = 'title' | 'status' | 'priority' | 'assignee' | 'org' | 'created_at';
+type SortField = 'title' | 'status' | 'priority' | 'urgency' | 'assignee' | 'org' | 'created_at';
 type SortDir = 'asc' | 'desc';
 
 const PRIORITY_ORDER: Record<string, number> = { critical: 0, urgent: 0, high: 1, normal: 2, low: 3 };
 const STATUS_ORDER = { blocked: 0, in_progress: 1, pending: 2, completed: 3 };
+
+function UrgencyBadge({ score }: { score: number }) {
+  let color = 'text-muted-foreground';
+  let bg = 'bg-muted/50';
+  if (score >= 60) { color = 'text-red-700 dark:text-red-400'; bg = 'bg-red-100 dark:bg-red-950'; }
+  else if (score >= 40) { color = 'text-orange-700 dark:text-orange-400'; bg = 'bg-orange-100 dark:bg-orange-950'; }
+  else if (score >= 20) { color = 'text-yellow-700 dark:text-yellow-400'; bg = 'bg-yellow-100 dark:bg-yellow-950'; }
+
+  return (
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${color} ${bg}`}>
+      {score}
+    </span>
+  );
+}
 
 interface TaskListTableProps {
   tasks: Task[];
@@ -25,7 +39,7 @@ interface TaskListTableProps {
 }
 
 export function TaskListTable({ tasks, onTaskClick }: TaskListTableProps) {
-  const [sortField, setSortField] = useState<SortField>('created_at');
+  const [sortField, setSortField] = useState<SortField>('urgency');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const sorted = useMemo(() => {
@@ -41,6 +55,9 @@ export function TaskListTable({ tasks, onTaskClick }: TaskListTableProps) {
           break;
         case 'priority':
           cmp = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+          break;
+        case 'urgency':
+          cmp = (a.urgency_score ?? 0) - (b.urgency_score ?? 0);
           break;
         case 'assignee':
           cmp = (a.assignee ?? '').localeCompare(b.assignee ?? '');
@@ -78,6 +95,7 @@ export function TaskListTable({ tasks, onTaskClick }: TaskListTableProps) {
 
   const columns: { field: SortField; label: string }[] = [
     { field: 'title', label: 'Title' },
+    { field: 'urgency', label: 'Urgency' },
     { field: 'status', label: 'Status' },
     { field: 'priority', label: 'Priority' },
     { field: 'assignee', label: 'Assignee' },
@@ -106,7 +124,7 @@ export function TaskListTable({ tasks, onTaskClick }: TaskListTableProps) {
       <TableBody>
         {sorted.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+            <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
               No tasks found
             </TableCell>
           </TableRow>
@@ -119,6 +137,9 @@ export function TaskListTable({ tasks, onTaskClick }: TaskListTableProps) {
             >
               <TableCell className="max-w-[300px] truncate font-medium">
                 {task.title}
+              </TableCell>
+              <TableCell>
+                <UrgencyBadge score={task.urgency_score ?? 0} />
               </TableCell>
               <TableCell>
                 <StatusBadge status={task.status} />

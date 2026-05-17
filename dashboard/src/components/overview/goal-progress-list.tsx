@@ -14,7 +14,7 @@ export function GoalProgressList({ goals }: GoalProgressListProps) {
     return (
       <div className="py-4 text-center text-sm text-muted-foreground">
         No goals set.{' '}
-        <Link href="/strategy" className="text-primary hover:underline">
+        <Link href="/system/strategy" className="text-primary hover:underline">
           Visit Strategy to add goals.
         </Link>
       </div>
@@ -32,7 +32,7 @@ export function GoalProgressList({ goals }: GoalProgressListProps) {
           Top Goals
         </span>
         <Link
-          href="/strategy"
+          href="/system/strategy"
           className="flex items-center gap-1 text-xs text-primary hover:underline"
         >
           Edit

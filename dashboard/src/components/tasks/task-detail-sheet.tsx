@@ -257,6 +257,12 @@ export function TaskDetailSheet({
               <span className="text-muted-foreground">Project</span>
               <p className="font-medium">{task.project ?? '-'}</p>
             </div>
+            {task.waiting_on && (
+              <div>
+                <span className="text-muted-foreground">Waiting on</span>
+                <p className="font-medium text-orange-600 dark:text-orange-400">{task.waiting_on}</p>
+              </div>
+            )}
             <div>
               <span className="text-muted-foreground">Created</span>
               <div><TimeAgo date={task.created_at} /></div>

@@ -36,25 +36,25 @@ export function ActionRequired({
       icon: <IconUser size={18} className="text-primary" />,
       label: 'task assigned to you',
       count: humanTasks,
-      href: '/tasks?agent=human',
+      href: '/system/tasks?agent=human',
     },
     {
       icon: <IconShield size={18} className="text-primary" />,
       label: 'pending approval',
       count: pendingApprovals,
-      href: '/approvals',
+      href: '/system/approvals',
     },
     {
       icon: <IconAlertTriangle size={18} className="text-warning" />,
       label: 'blocked task',
       count: blockedTasks,
-      href: '/tasks?status=blocked',
+      href: '/system/tasks?status=blocked',
     },
     {
       icon: <IconHeartOff size={18} className="text-destructive" />,
       label: 'stale agent',
       count: staleAgents,
-      href: '/agents',
+      href: '/system/agents',
     },
   ];
 
