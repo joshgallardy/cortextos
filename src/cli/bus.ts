@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { spawnSync, execFileSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { sendMessage, checkInbox, ackInbox } from '../bus/message.js';
 import { validateAgentName } from '../utils/validate.js';
@@ -27,6 +27,22 @@ import { IPCClient } from '../daemon/ipc-server.js';
 import { TelegramAPI } from '../telegram/api.js';
 import { logOutboundMessage, cacheLastSent } from '../telegram/logging.js';
 import type { Priority, Task, TaskStatus, EventCategory, EventSeverity, ApprovalCategory, ApprovalStatus, OrgContext, CronDefinition } from '../types/index.js';
+
+/**
+ * Resolve agent alias (e.g. "bob" -> "chief") from config/agent-aliases.json.
+ * Returns the canonical agent name, or the original if no alias matches.
+ */
+function resolveAgentAlias(name: string): string {
+  const { homedir } = require('os');
+  const aliasPath = join(homedir(), '.cortextos', 'default', 'config', 'agent-aliases.json');
+  if (!existsSync(aliasPath)) return name;
+  try {
+    const aliases = JSON.parse(readFileSync(aliasPath, 'utf-8'));
+    return aliases[name] ?? name;
+  } catch {
+    return name;
+  }
+}
 
 /**
  * Check if the org requires deliverables and the task has none attached.
@@ -82,6 +98,8 @@ busCommand
       console.error(`Invalid priority '${priority}'. Must be one of: ${validPriorities.join(', ')}`);
       process.exit(1);
     }
+    // Resolve agent aliases (e.g. "bob" -> "chief")
+    to = resolveAgentAlias(to);
     // Security (H9): Validate agent name before any filesystem access.
     try {
       validateAgentName(to);
@@ -153,7 +171,8 @@ busCommand
   .option('--needs-approval', 'Require human approval before execution')
   .option('--blocked-by <ids>', 'Comma-separated task IDs that must complete before this task can progress')
   .option('--blocks <ids>', 'Comma-separated task IDs that this new task will block (symmetric reverse edge)')
-  .action((title: string, opts: { desc?: string; assignee?: string; priority: string; project?: string; needsApproval?: boolean; blockedBy?: string; blocks?: string }) => {
+  .option('--waiting-on <who>', 'Person or agent this task is waiting on (e.g. "Josh", "agent:larry")')
+  .action((title: string, opts: { desc?: string; assignee?: string; priority: string; project?: string; needsApproval?: boolean; blockedBy?: string; blocks?: string; waitingOn?: string }) => {
     const env = resolveEnv();
     const paths = resolvePaths(env.agentName, env.instanceId, env.org);
     const parseList = (raw?: string) => (raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : []);
@@ -165,6 +184,7 @@ busCommand
       needsApproval: opts.needsApproval ?? false,
       blockedBy: parseList(opts.blockedBy),
       blocks: parseList(opts.blocks),
+      waitingOn: opts.waitingOn,
     });
     console.log(taskId);
     // Auto-notify assignee so the task is visible immediately (issue #78)
@@ -202,6 +222,26 @@ busCommand
 
     updateTask(paths, id, status as TaskStatus);
     console.log(`Updated ${id} -> ${status}`);
+  });
+
+busCommand
+  .command('set-waiting-on')
+  .argument('<id>', 'Task ID')
+  .argument('<who>', 'Who/what this task is waiting on (use "none" to clear)')
+  .description('Set or clear the waiting_on field for a task')
+  .action((id: string, who: string) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const taskFile = join(paths.taskDir, `${id}.json`);
+    if (!existsSync(taskFile)) {
+      console.error(`Task not found: ${id}`);
+      process.exit(1);
+    }
+    const task = JSON.parse(readFileSync(taskFile, 'utf-8'));
+    task.waiting_on = who === 'none' ? null : who;
+    task.updated_at = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    writeFileSync(taskFile, JSON.stringify(task, null, 2));
+    console.log(`${id} waiting_on: ${task.waiting_on ?? '(cleared)'}`);
   });
 
 busCommand
@@ -2631,6 +2671,48 @@ busCommand
   .command('hook-idle-flag')
   .description('Stop hook: writes last_idle.flag timestamp so fast-checker knows agent finished its turn')
   .action(() => runHook('hook-idle-flag'));
+
+busCommand
+  .command('hook-pretask-memory')
+  .description('PreToolUse hook: queries KB + daily memory before starting a task (community call #1)')
+  .action(() => runHook('hook-pretask-memory'));
+
+busCommand
+  .command('hook-truncation-guard')
+  .description('PostToolUse hook: warns when Read tool returns truncated content (community call #2)')
+  .action(() => runHook('hook-truncation-guard'));
+
+// --- Transcript Audit ---
+
+busCommand
+  .command('audit-transcript')
+  .description('Audit a session transcript against a skill definition for compliance')
+  .argument('<transcript>', 'Path to the .jsonl transcript file')
+  .argument('<skill>', 'Path to the SKILL.md file to audit against')
+  .option('--json', 'Output as JSON instead of formatted report')
+  .option('--summary', 'Show only score and deviations count')
+  .action((transcript: string, skill: string, opts: { json?: boolean; summary?: boolean }) => {
+    const { parseTranscript, parseSkillSteps, auditTranscript, formatAuditReport } = require('../bus/transcript-audit');
+    try {
+      const actions = parseTranscript(transcript);
+      const { name, steps } = parseSkillSteps(skill);
+      const result = auditTranscript(actions, name, steps);
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else if (opts.summary) {
+        console.log(`Skill: ${result.skillName}`);
+        console.log(`Score: ${result.complianceScore}%`);
+        console.log(`Steps: ${result.stepsFollowed}/${result.totalSteps} followed`);
+        console.log(`Deviations: ${result.deviations.length}`);
+      } else {
+        console.log(formatAuditReport(result));
+      }
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
 
 // --- OAuth token rotation commands ---
 

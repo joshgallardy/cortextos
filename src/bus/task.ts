@@ -23,6 +23,7 @@ export function createTask(
     dueDate?: string;
     blockedBy?: string[];
     blocks?: string[];
+    waitingOn?: string;
   } = {},
 ): string {
   const {
@@ -34,6 +35,7 @@ export function createTask(
     dueDate = '',
     blockedBy = [],
     blocks = [],
+    waitingOn = '',
   } = options;
 
   validatePriority(priority);
@@ -77,6 +79,7 @@ export function createTask(
     updated_at: now,
     completed_at: null,
     due_date: dueDate || null,
+    waiting_on: waitingOn || null,
     archived: false,
     ...(blockedBy.length ? { blocked_by: [...blockedBy] } : {}),
     ...(blocks.length ? { blocks: [...blocks] } : {}),
