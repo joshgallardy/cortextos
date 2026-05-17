@@ -41,6 +41,28 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cortextos bus hook-pretask-memory",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cortextos bus hook-truncation-guard",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "Stop": [

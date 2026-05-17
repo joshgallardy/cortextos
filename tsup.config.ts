@@ -12,6 +12,8 @@ export default defineConfig({
     'hooks/hook-extract-facts': 'src/hooks/hook-extract-facts.ts',
     'hooks/hook-idle-flag': 'src/hooks/hook-idle-flag.ts',
     'hooks/hook-context-status': 'src/hooks/hook-context-status.ts',
+    'hooks/hook-pretask-memory': 'src/hooks/hook-pretask-memory.ts',
+    'hooks/hook-truncation-guard': 'src/hooks/hook-truncation-guard.ts',
   },
   format: ['cjs'],
   target: 'node20',
