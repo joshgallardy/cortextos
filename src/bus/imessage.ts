@@ -18,6 +18,8 @@ export interface CheckIMessageOptions {
   contact?: string;
   limit?: number;
   format?: 'text' | 'json';
+  /** Override database path (for testing). Defaults to ~/Library/Messages/chat.db */
+  dbPath?: string;
 }
 
 /**
@@ -56,13 +58,13 @@ export function parseSince(value: string): Date {
  * Read iMessages from ~/Library/Messages/chat.db.
  */
 export function checkIMessage(options: CheckIMessageOptions = {}): { count: number; since: string; messages: IMessage[] } {
-  const dbPath = join(homedir(), 'Library', 'Messages', 'chat.db');
+  const dbPath = options.dbPath ?? join(homedir(), 'Library', 'Messages', 'chat.db');
 
   if (!existsSync(dbPath)) {
     throw new Error(`iMessage database not found at ${dbPath}. Ensure Full Disk Access is enabled.`);
   }
 
-  const limit = options.limit ?? 20;
+  const limit = Math.max(1, Math.min(options.limit ?? 20, 1000));
   const since = options.since ? parseSince(options.since) : new Date(Date.now() - 86400000); // default 24h
 
   // Convert since to Apple Core Data nanosecond timestamp
@@ -71,9 +73,13 @@ export function checkIMessage(options: CheckIMessageOptions = {}): { count: numb
 
   let whereClause = `WHERE m.date > ${sinceAppleNs}`;
   if (options.contact) {
-    // Escape single quotes for SQL safety
-    const escaped = options.contact.replace(/'/g, "''");
-    whereClause += ` AND h.id LIKE '%${escaped}%'`;
+    // Strict sanitization: contacts are phone numbers or emails only
+    // Allow: alphanumeric, +, @, ., -, _
+    const sanitized = options.contact.replace(/[^a-zA-Z0-9+@.\-_]/g, '');
+    if (sanitized.length === 0) {
+      throw new Error('Invalid --contact value: no valid characters after sanitization.');
+    }
+    whereClause += ` AND h.id LIKE '%${sanitized}%'`;
   }
 
   const query = `
