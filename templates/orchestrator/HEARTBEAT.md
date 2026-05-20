@@ -123,7 +123,13 @@ Also read your own GOALS.md for any manual overrides or notes you left yourself.
 
 Full reference: `.claude/skills/tasks/SKILL.md`
 
-Pick your highest priority task and work on it. Tasks should trace back to your current goals.
+Before picking a task, query the knowledge base for relevant context on your current goals:
+
+```bash
+cortextos bus kb-query "current goals and pending work" --org $CTX_ORG --agent $CTX_AGENT_NAME --top-k 3
+```
+
+Use the results to inform which task to pick and how to approach it. Then pick your highest priority task and work on it. Tasks should trace back to your current goals.
 
 When starting:
 ```bash

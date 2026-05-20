@@ -102,7 +102,13 @@ cortextos bus create-task "<title>" --desc "<description>" --assignee $CTX_AGENT
 
 ## Step 7: Resume work
 
-Pick your highest priority task and work on it.
+Before picking a task, query the knowledge base for relevant context on your current goals:
+
+```bash
+cortextos bus kb-query "current goals and pending work" --org $CTX_ORG --agent $CTX_AGENT_NAME --top-k 3
+```
+
+Use the results to inform which task to pick and how to approach it. Then pick your highest priority task and work on it.
 
 When starting:
 ```bash
