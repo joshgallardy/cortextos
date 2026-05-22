@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'path';
 import { execSync } from 'child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 
 const HOOK_PATH = join(__dirname, '../../../dist/hooks/hook-truncation-guard.js');
 
@@ -27,11 +29,27 @@ function makeLines(count: number): string {
 }
 
 describe('hook-truncation-guard', () => {
+  // --- No-match: wrong tool ---
+
   it('exits silently for non-Read tools', () => {
     const result = runHook({ tool_name: 'Bash', tool_input: { command: 'ls' } });
     expect(result.stdout).toBe('');
     expect(result.status).toBe(0);
   });
+
+  it('exits silently for Write tool', () => {
+    const result = runHook({ tool_name: 'Write', tool_input: { file_path: '/tmp/f', content: 'x' } });
+    expect(result.stdout).toBe('');
+    expect(result.status).toBe(0);
+  });
+
+  it('exits silently for Edit tool', () => {
+    const result = runHook({ tool_name: 'Edit', tool_input: { file_path: '/tmp/f' } });
+    expect(result.stdout).toBe('');
+    expect(result.status).toBe(0);
+  });
+
+  // --- No-match: small/medium files ---
 
   it('exits silently for small files (well under limit)', () => {
     const result = runHook({
@@ -52,6 +70,18 @@ describe('hook-truncation-guard', () => {
     expect(result.stdout).toBe('');
     expect(result.status).toBe(0);
   });
+
+  it('does not warn when just under the limit (1990 lines)', () => {
+    const result = runHook({
+      tool_name: 'Read',
+      tool_input: { file_path: '/tmp/justunder.txt' },
+      tool_response: makeLines(1990),
+    });
+    expect(result.stdout).toBe('');
+    expect(result.status).toBe(0);
+  });
+
+  // --- Match: truncation detected ---
 
   it('warns when response hits default 2000-line limit', () => {
     const result = runHook({
@@ -82,6 +112,18 @@ describe('hook-truncation-guard', () => {
     expect(output.hookSpecificOutput.additionalContext).toContain('offset: 500');
   });
 
+  it('warns at the margin boundary (1996 lines, within +/-5)', () => {
+    const result = runHook({
+      tool_name: 'Read',
+      tool_input: { file_path: '/tmp/margin.txt' },
+      tool_response: makeLines(1996),
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toBe('');
+  });
+
+  // --- Offset handling ---
+
   it('accounts for offset in the suggested next offset', () => {
     const result = runHook({
       tool_name: 'Read',
@@ -94,26 +136,77 @@ describe('hook-truncation-guard', () => {
     expect(output.hookSpecificOutput.additionalContext).toContain('offset: 600');
   });
 
-  it('does not warn when just under the limit', () => {
-    // 1990 lines — safely under the 2000-5=1995 threshold
+  it('calculates correct offset with large initial offset', () => {
     const result = runHook({
       tool_name: 'Read',
-      tool_input: { file_path: '/tmp/justunder.txt' },
-      tool_response: makeLines(1990),
+      tool_input: { file_path: '/tmp/deep.txt', offset: 5000, limit: 200 },
+      tool_response: makeLines(200),
     });
-    expect(result.stdout).toBe('');
     expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.hookSpecificOutput.additionalContext).toContain('offset: 5200');
   });
 
-  it('warns at the margin boundary (1996 lines, within ±5)', () => {
+  // --- Response format variants ---
+
+  it('handles tool_response as object with content key', () => {
     const result = runHook({
       tool_name: 'Read',
-      tool_input: { file_path: '/tmp/margin.txt' },
-      tool_response: makeLines(1996),
+      tool_input: { file_path: '/tmp/obj.txt' },
+      tool_response: { content: makeLines(2000) },
     });
     expect(result.status).toBe(0);
-    expect(result.stdout).not.toBe('');
+    const output = JSON.parse(result.stdout);
+    expect(output.hookSpecificOutput.additionalContext).toContain('WARNING');
   });
+
+  it('handles tool_response as object with output key', () => {
+    const result = runHook({
+      tool_name: 'Read',
+      tool_input: { file_path: '/tmp/obj2.txt' },
+      tool_response: { output: makeLines(2000) },
+    });
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.hookSpecificOutput.additionalContext).toContain('WARNING');
+  });
+
+  // --- File size info ---
+
+  it('includes file size info when file exists on disk', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'tguard-'));
+    try {
+      const filePath = join(tmp, 'large.txt');
+      // Create a file large enough to report meaningful size
+      writeFileSync(filePath, 'x'.repeat(50000));
+
+      const result = runHook({
+        tool_name: 'Read',
+        tool_input: { file_path: filePath },
+        tool_response: makeLines(2000),
+      });
+      expect(result.status).toBe(0);
+      const output = JSON.parse(result.stdout);
+      expect(output.hookSpecificOutput.additionalContext).toContain('file size:');
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('still warns even when file does not exist on disk (no size info)', () => {
+    const result = runHook({
+      tool_name: 'Read',
+      tool_input: { file_path: '/tmp/nonexistent-truncguard-test.txt' },
+      tool_response: makeLines(2000),
+    });
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.hookSpecificOutput.additionalContext).toContain('WARNING');
+    // No file size info since file doesn't exist
+    expect(output.hookSpecificOutput.additionalContext).not.toContain('file size:');
+  });
+
+  // --- Edge cases / graceful failure ---
 
   it('handles empty response gracefully', () => {
     const result = runHook({
@@ -122,6 +215,24 @@ describe('hook-truncation-guard', () => {
       tool_response: '',
     });
     expect(result.stdout).toBe('');
+    expect(result.status).toBe(0);
+  });
+
+  it('handles missing file_path gracefully', () => {
+    const result = runHook({
+      tool_name: 'Read',
+      tool_input: {},
+      tool_response: makeLines(2000),
+    });
+    // Missing file_path — should exit silently (empty filePath guard)
+    expect(result.status).toBe(0);
+  });
+
+  it('handles missing tool_input gracefully', () => {
+    const result = runHook({
+      tool_name: 'Read',
+      tool_response: makeLines(2000),
+    });
     expect(result.status).toBe(0);
   });
 
@@ -136,5 +247,16 @@ describe('hook-truncation-guard', () => {
     } catch (err: any) {
       expect(err.status).toBe(0);
     }
+  });
+
+  it('handles very small explicit limit (limit: 10)', () => {
+    const result = runHook({
+      tool_name: 'Read',
+      tool_input: { file_path: '/tmp/tiny-limit.txt', limit: 10 },
+      tool_response: makeLines(10),
+    });
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.hookSpecificOutput.additionalContext).toContain('limit: 10');
   });
 });

@@ -36,7 +36,7 @@ const QUIET_SUPPRESSED_TYPES = new Set([
   'rate-limited',
 ]);
 
-function isQuietHoursLA(now: Date): boolean {
+export function isQuietHoursLA(now: Date): boolean {
   const laString = now.toLocaleString('en-US', {
     timeZone: 'America/Los_Angeles',
     hour12: false,
@@ -53,7 +53,7 @@ function isQuietHoursLA(now: Date): boolean {
  * signatures. Mirrors OutputBuffer.hasRateLimitSignature so the hook and the
  * daemon use the same detection logic.
  */
-function detectRateLimitInLog(logPath: string): boolean {
+export function detectRateLimitInLog(logPath: string): boolean {
   try {
     const size = statSync(logPath).size;
     const readBytes = Math.min(size, 200 * 1024); // last 200 KB
@@ -130,7 +130,7 @@ export function notifyAgents(opts: {
  * Return true if an identical (agent, type) alert was already sent within
  * the dedup window. Side effect: records this attempt when it is the first.
  */
-function shouldSuppressDedup(stateDir: string, endType: string): boolean {
+export function shouldSuppressDedup(stateDir: string, endType: string): boolean {
   const dedupFile = join(stateDir, '.crash_alert_dedup.json');
   const now = Date.now();
   let last: Record<string, number> = {};
