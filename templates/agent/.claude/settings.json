@@ -49,6 +49,11 @@
             "type": "command",
             "command": "cortextos bus hook-pretask-memory",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "cortextos bus hook-prereply-recall",
+            "timeout": 5
           }
         ]
       }

@@ -14,6 +14,7 @@ export default defineConfig({
     'hooks/hook-context-status': 'src/hooks/hook-context-status.ts',
     'hooks/hook-pretask-memory': 'src/hooks/hook-pretask-memory.ts',
     'hooks/hook-truncation-guard': 'src/hooks/hook-truncation-guard.ts',
+    'hooks/hook-prereply-recall': 'src/hooks/hook-prereply-recall.ts',
   },
   format: ['cjs'],
   target: 'node20',

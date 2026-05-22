@@ -20,6 +20,7 @@ import { nextFireFromCron } from '../daemon/cron-scheduler.js';
 import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/knowledge-base.js';
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
 import { getCostStatus, resetCostCap, readCostEnforcement } from '../bus/cost-caps.js';
+import { checkIMessage, formatText } from '../bus/imessage.js';
 import { isKnownModel } from '../bus/model-routing.js';
 import { resolvePaths } from '../utils/paths.js';
 import { resolveEnv } from '../utils/env.js';
@@ -2682,6 +2683,11 @@ busCommand
   .description('PostToolUse hook: warns when Read tool returns truncated content (community call #2)')
   .action(() => runHook('hook-truncation-guard'));
 
+busCommand
+  .command('hook-prereply-recall')
+  .description('PreToolUse hook: queries KB before sending Telegram or agent messages (recall gap #1/#4)')
+  .action(() => runHook('hook-prereply-recall'));
+
 // --- Transcript Audit ---
 
 busCommand
@@ -3096,6 +3102,33 @@ busCommand
       } else {
         console.log(`Failed to clear enforcement for ${agent}.`);
       }
+    }
+  });
+
+busCommand
+  .command('check-imessage')
+  .description('Read recent iMessages from macOS chat.db (read-only)')
+  .option('--since <value>', 'Time filter: "2h", "1d", or ISO date (default: 24h)')
+  .option('--contact <id>', 'Filter by phone number or email (partial match)')
+  .option('--limit <n>', 'Max messages to return', '20')
+  .option('--format <type>', 'Output format: text or json', 'text')
+  .action((opts: { since?: string; contact?: string; limit: string; format: string }) => {
+    try {
+      const result = checkIMessage({
+        since: opts.since,
+        contact: opts.contact,
+        limit: parseInt(opts.limit, 10),
+        format: opts.format as 'text' | 'json',
+      });
+
+      if (opts.format === 'json') {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(formatText(result));
+      }
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
     }
   });
 
