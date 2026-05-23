@@ -21,6 +21,12 @@ import { queryKnowledgeBase, ingestKnowledgeBase, ensureKBDirs } from '../bus/kn
 import { checkUsageApi, refreshOAuthToken, rotateOAuth, loadAccounts, ALERT_5H, ALERT_7D } from '../bus/oauth.js';
 import { getCostStatus, resetCostCap, readCostEnforcement } from '../bus/cost-caps.js';
 import { checkIMessage, formatText } from '../bus/imessage.js';
+import {
+  crmIngest, crmResolve, crmSyncVault,
+  listContacts, staleContacts, searchContacts, readContact,
+  formatContactList, formatContactDetail, formatIngestResult,
+  formatResolveResult, formatSyncVaultResult,
+} from '../bus/crm.js';
 import { isKnownModel } from '../bus/model-routing.js';
 import { resolvePaths } from '../utils/paths.js';
 import { resolveEnv } from '../utils/env.js';
@@ -3130,6 +3136,117 @@ busCommand
       console.error(`Error: ${err.message}`);
       process.exit(1);
     }
+  });
+
+// --- CRM Commands ---
+
+busCommand
+  .command('crm-ingest')
+  .description('Ingest iMessages into CRM contacts and interactions')
+  .action(() => {
+    try {
+      const env = resolveEnv();
+      const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+      const result = crmIngest({ crmDir: paths.crmDir });
+      console.log(formatIngestResult(result));
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
+  });
+
+busCommand
+  .command('crm-list')
+  .description('List all CRM contacts')
+  .option('--format <type>', 'Output format: text or json', 'text')
+  .action((opts: { format: string }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const contacts = listContacts(paths.crmDir);
+    if (opts.format === 'json') {
+      console.log(JSON.stringify(contacts, null, 2));
+    } else {
+      console.log(formatContactList(contacts));
+    }
+  });
+
+busCommand
+  .command('crm-contact')
+  .description('Show a single CRM contact by ID')
+  .argument('<id>', 'Contact ID')
+  .option('--format <type>', 'Output format: text or json', 'text')
+  .action((id: string, opts: { format: string }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const contact = readContact(paths.crmDir, id);
+    if (!contact) {
+      console.error(`Contact not found: ${id}`);
+      process.exit(1);
+    }
+    if (opts.format === 'json') {
+      console.log(JSON.stringify(contact, null, 2));
+    } else {
+      console.log(formatContactDetail(contact));
+    }
+  });
+
+busCommand
+  .command('crm-search')
+  .description('Search CRM contacts by name, phone, email, or tag')
+  .argument('<query>', 'Search query')
+  .option('--format <type>', 'Output format: text or json', 'text')
+  .action((query: string, opts: { format: string }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const contacts = searchContacts(paths.crmDir, query);
+    if (opts.format === 'json') {
+      console.log(JSON.stringify(contacts, null, 2));
+    } else {
+      console.log(formatContactList(contacts));
+    }
+  });
+
+busCommand
+  .command('crm-stale')
+  .description('List CRM contacts overdue for contact based on cadence')
+  .option('--days <n>', 'Override: contacts silent for N+ days')
+  .option('--format <type>', 'Output format: text or json', 'text')
+  .action((opts: { days?: string; format: string }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const maxDays = opts.days ? parseInt(opts.days, 10) : undefined;
+    const contacts = staleContacts(paths.crmDir, maxDays);
+    if (opts.format === 'json') {
+      console.log(JSON.stringify(contacts, null, 2));
+    } else {
+      if (contacts.length === 0) {
+        console.log('No stale contacts found.');
+      } else {
+        console.log(formatContactList(contacts));
+      }
+    }
+  });
+
+busCommand
+  .command('crm-resolve')
+  .description('Match unresolved CRM contacts to Obsidian vault people')
+  .option('--vault-path <path>', 'Path to 05-People/ vault directory', '/Users/opieclaw/SecondBrain/05-People')
+  .action((opts: { vaultPath: string }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const result = crmResolve({ crmDir: paths.crmDir, vaultPeoplePath: opts.vaultPath });
+    console.log(formatResolveResult(result));
+  });
+
+busCommand
+  .command('crm-sync-vault')
+  .description('Update Obsidian vault last-contact from CRM interaction data')
+  .option('--vault-path <path>', 'Path to 05-People/ vault directory', '/Users/opieclaw/SecondBrain/05-People')
+  .action((opts: { vaultPath: string }) => {
+    const env = resolveEnv();
+    const paths = resolvePaths(env.agentName, env.instanceId, env.org);
+    const result = crmSyncVault({ crmDir: paths.crmDir, vaultPeoplePath: opts.vaultPath });
+    console.log(formatSyncVaultResult(result));
   });
 
 function sleepMs(ms: number): Promise<void> {

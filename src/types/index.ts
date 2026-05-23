@@ -615,6 +615,8 @@ export interface BusPaths {
    * they live under CTX_ROOT.
    */
   deliverablesDir: string;
+  /** Per-org CRM root: {ctxRoot}/orgs/{org}/crm/. Contacts, interactions, identity map. */
+  crmDir: string;
 }
 
 // IPC Types

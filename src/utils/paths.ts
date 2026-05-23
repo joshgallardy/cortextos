@@ -45,6 +45,7 @@ export function resolvePaths(
     approvalDir: join(orgBase, 'approvals'),
     analyticsDir: join(orgBase, 'analytics'),
     deliverablesDir: join(orgBase, 'deliverables'),
+    crmDir: join(orgBase, 'crm'),
   };
 }
 
